@@ -10,6 +10,10 @@
 <link rel="manifest" href="manifest.json">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="stylesheet" href="devis.css">
+<script src="devis.js"></script>
 <style>
 /* RSG : bandeau noir du logo + barre d'onglets ; chaque onglet occupe la zone principale. */
 :root{
@@ -365,7 +369,7 @@ async function refresh() {
   if (refreshing) return refreshing;
   refreshing = (async () => {
     try {
-      await Promise.all(TABS.filter(t => t.collection).map(t => store.load(t.collection)));
+      await Promise.all([...new Set(TABS.flatMap(t => t.collections || (t.collection ? [t.collection] : [])))].map(c => store.load(c)));
       store.saveCache(); setOnline(true);
     } catch (e) {
       if (/JWT|row-level|permission/i.test(String(e?.message))) { toast(frError(e)); }
@@ -574,24 +578,27 @@ $("#d-del").onclick = () => {
 };
 
 /* ---------- Onglets ---------- */
-/* ---------- Onglet 2 : Création de devis (à construire) ---------- */
-const devis = {
-  id: "devis",
-  title: "Création de devis",
+/* ---------- Onglet 2 : Création de devis (fichier devis.js) ---------- */
+const devis = window.devisTab;
+
+/* ---------- Onglet 3 : Création de facture (à construire) ---------- */
+const factures = {
+  id: "factures",
+  title: "Création de facture",
   soon: true,
-  collection: null,          // donnera "devis" quand l'onglet sera réalisé
+  collection: null,          // donnera "factures" quand l'onglet sera réalisé
   mount(el) {
     el.innerHTML = `<div class="soonpage">
-      <div class="mark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></svg></div>
-      <h1>Création de devis</h1>
-      <p>Cet onglet est en préparation. Il permettra de créer vos devis directement dans RSG, sur le PC comme sur le téléphone.</p>
-      <button class="btn primary back" data-tab="barres6m">Aller au répertoire de stock</button>
+      <div class="mark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></div>
+      <h1>Création de facture</h1>
+      <p>Cet onglet est en préparation. Il permettra de créer vos factures dans RSG, sur le PC comme sur le téléphone, par exemple à partir d'un devis accepté.</p>
+      <button class="btn primary back" data-tab="devis">Aller aux devis</button>
     </div>`;
   },
   render() {},
 };
 
-const TABS = [barres, devis];   // les prochains onglets s'ajouteront ici
+const TABS = [barres, devis, factures];   // les prochains onglets s'ajouteront ici
 let current = null;
 function showTab(id) {
   const t = TABS.find(x => x.id === id) || TABS[0];
@@ -606,7 +613,7 @@ document.addEventListener("click", e => { const b = e.target.closest("[data-tab]
 document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => b.closest("dialog").close()));
 const b64u = str => btoa(unescape(encodeURIComponent(str))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const unb64u = str => decodeURIComponent(escape(atob(str.replace(/-/g, "+").replace(/_/g, "/"))));
-const getCfg = () => { try { return JSON.parse(lsGet(CFG_KEY) || "null"); } catch { return null; } };
+const getCfg = () => { if (window.RSG_FORCE_CONFIG) return window.RSG_FORCE_CONFIG; try { return JSON.parse(lsGet(CFG_KEY) || "null"); } catch { return null; } };
 
 $("#settingsBtn").onclick = () => {
   $("#acct").innerHTML = session ? `Connecté : <b>${esc(session.user?.email || "")}</b>` : "Non connecté";
@@ -700,7 +707,7 @@ async function boot() {
     try { const c = JSON.parse(unb64u(m[1])); if (c.u && c.k) lsSet(CFG_KEY, JSON.stringify({ url: c.u, key: c.k })); } catch {}
     history.replaceState(null, "", location.pathname + location.search);
   }
-  let saved = lsGet("rsg-tab");
+  let saved = window.RSG_START_TAB || lsGet("rsg-tab");
   const hasCache = store.loadCache();
   showTab(saved);
   setOnline(false);

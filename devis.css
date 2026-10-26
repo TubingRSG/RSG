@@ -1,0 +1,161 @@
+/* ===== RSG — onglet « Création de devis » ===== */
+.dv{--a4w:794px}
+.dv-hide{display:none!important}
+
+/* ---------- page A4 (identique au devis Excel) ---------- */
+.a4{width:var(--a4w);min-height:1123px;background:#fff;color:#1a1a1a;border:1px solid #1a1a1a;padding:26px 30px 18px;
+  font:13px/1.35 Calibri,Carlito,"Segoe UI",Arial,sans-serif;display:flex;flex-direction:column;box-shadow:0 8px 30px rgba(0,0,0,.12);position:relative}
+.a4 *{box-sizing:border-box}
+.a4 .hd{display:grid;grid-template-columns:1fr 330px;gap:16px}
+.a4 .logo{height:46px;width:auto;display:block;margin-bottom:6px}
+.a4 .co{font-size:12.5px}
+.a4 .co small{display:block;font-size:10px;color:#6b6b6b;line-height:1.35}
+.a4 .title{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2.5px solid #c00000;padding-bottom:4px;margin-top:6px}
+.a4 .title b{font-size:21px;letter-spacing:.01em}
+.a4 .num{font-size:18px;font-weight:700;color:#c00000;text-align:right}
+.a4 .meta{display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;margin-top:6px;font-size:12px}
+.a4 .meta span{color:#6b6b6b;text-align:right}
+.a4 .meta em{font-style:normal;font-weight:700;text-align:center}
+.a4 .clientlbl{font-size:10px;font-weight:700;color:#c00000;margin:12px 0 2px;letter-spacing:.04em}
+.a4 .client{background:#f4f4f5;border:1px solid #1a1a1a;padding:10px 12px;min-height:118px;display:flex;flex-direction:column;gap:2px}
+.a4 .client .cn{font-size:15px;font-weight:700}
+.a4 .client .ref{display:grid;grid-template-columns:78px 1fr;font-size:12px;margin-top:4px}
+.a4 .client .ref span{color:#6b6b6b}
+.a4 .client .liv{font-size:11px;color:#8a8a8a;margin-top:4px}
+.a4 table{width:100%;border-collapse:collapse;margin-top:22px;table-layout:fixed}
+.a4 thead th{background:#1a1a1a;color:#fff;font-size:12px;font-weight:700;padding:7px 10px;text-align:center}
+.a4 thead th:first-child{text-align:left}
+.a4 thead th:last-child{text-align:right}
+.a4 tbody td{padding:7px 10px;border-bottom:1px solid #d0d0d4;font-size:12.5px;vertical-align:middle;height:40px}
+.a4 tbody tr:nth-child(even) td{background:#f4f4f5}
+.a4 td.n{text-align:right;white-space:nowrap}
+.a4 td.q{text-align:center}
+.a4 td.t{text-align:right;font-weight:700;white-space:nowrap}
+.a4 col.c1{width:auto}.a4 col.c2{width:120px}.a4 col.c3{width:80px}.a4 col.c4{width:120px}
+.a4 .tot{margin:16px 0 0 auto;width:330px}
+.a4 .tot div{display:grid;grid-template-columns:1fr 120px;align-items:center;background:#f4f4f5;padding:5px 10px;font-size:12.5px}
+.a4 .tot div+div{border-top:1px solid #fff}
+.a4 .tot div span{text-align:right;color:#6b6b6b;padding-right:14px}
+.a4 .tot div b{text-align:right;font-weight:400}
+.a4 .tot .ttc{background:#1a1a1a;color:#fff;padding:9px 10px}
+.a4 .tot .ttc span{color:#fff;font-weight:700;font-size:15px}
+.a4 .tot .ttc b{font-weight:700;font-size:16px}
+.a4 .cond{display:grid;grid-template-columns:1fr 130px 50px;gap:3px 10px;margin:22px 0 0 40px;font-size:12.5px;align-items:center}
+.a4 .cond > span{text-align:right}
+.a4 .cond .lbl{color:#c00000;font-weight:700}
+.a4 .cond b{font-weight:400;text-align:right;border-bottom:1px solid #d0d0d4;padding:1px 2px}
+.a4 .cond i{font-style:normal;color:#6b6b6b;font-size:11px;text-align:center}
+.a4 .cond .sum{color:#8a8a8a;font-style:italic;border:0}
+.a4 .acc{margin:16px 0 0 70px;width:470px}
+.a4 .acc .lbl{font-size:10px;font-weight:700;color:#c00000}
+.a4 .acc .box{border:1px solid #1a1a1a;height:86px;padding:4px 6px;font-size:10px;color:#8a8a8a;font-style:italic;display:flex;gap:110px}
+.a4 .foot{margin-top:auto;border-top:1px solid #d0d0d4;padding-top:6px;text-align:center;font-size:10px;color:#6b6b6b;font-style:italic}
+
+/* champs éditables sur la page (vue PC) : on écrit dans les cases comme dans Excel */
+.a4 .f{font:inherit;color:inherit;background:transparent;border:1px solid transparent;border-radius:3px;padding:1px 3px;width:100%;outline:none;min-width:0}
+.a4 .f:hover{border-color:#d0d0d4;background:#fffef2}
+.a4 .f:focus{border-color:#c00000;background:#fff;box-shadow:0 0 0 2px rgba(192,0,0,.15)}
+.a4 .f.num-in{text-align:right}
+.a4 .f.c{text-align:center}
+.a4 textarea.f{resize:none;overflow:hidden;line-height:1.3;display:block}
+.a4 .f::placeholder{color:#b9b9bf}
+.a4 select.f{appearance:none;-webkit-appearance:none;cursor:pointer;width:auto;padding:0 3px;font-weight:inherit}
+.a4 .rowdel{position:absolute;right:-34px;width:26px;height:26px;border-radius:6px;border:1px solid #d0d0d4;background:#fff;color:#c00000;cursor:pointer;font-size:15px;line-height:1;opacity:0;transition:opacity .15s}
+.a4 tbody tr{position:relative}
+.a4 tbody tr:hover .rowdel,.a4 .rowdel:focus{opacity:1}
+.a4 .addrow{display:flex;gap:8px;margin-top:8px}
+.a4 .addrow button,.a4 .addrow select{height:32px;border:1px dashed #b9b9bf;background:#fff;border-radius:8px;padding:0 12px;font:inherit;font-size:12.5px;color:#4a4a4a;cursor:pointer}
+.a4 .addrow button:hover,.a4 .addrow select:hover{border-color:#1a1a1a;color:#1a1a1a}
+.a4 .mailrow{font-size:11px;color:#6b6b6b;display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;margin-top:6px;border-top:1px dashed #d0d0d4;padding-top:5px}
+.a4.static .noprint,.pdfmode .noprint{display:none!important}
+
+/* ---------- vue PC ---------- */
+.dv-pc{display:grid;grid-template-columns:270px minmax(0,1fr);gap:20px;align-items:start}
+.dv-side{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;position:sticky;top:130px}
+.dv-side .top{padding:12px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
+.dv-side input{height:38px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);padding:0 10px;outline:none;width:100%}
+.dv-list{max-height:calc(100vh - 260px);overflow:auto}
+.dv-item{display:grid;grid-template-columns:1fr auto;gap:2px 8px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:transparent;padding:10px 12px;cursor:pointer}
+.dv-item:hover{background:var(--surface-2)}
+.dv-item.on{background:var(--surface-2);box-shadow:inset 3px 0 0 var(--red)}
+.dv-item b{font-size:13px}
+.dv-item span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-item em{font-style:normal;font-size:13px;font-weight:700;text-align:right}
+.dv-empty{padding:16px;color:var(--muted);font-size:14px}
+.dv-main{min-width:0;display:flex;flex-direction:column;gap:12px}
+.dv-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;position:sticky;top:130px;z-index:4}
+.dv-bar .btn{height:38px}
+.dv-bar .st{font-size:13px;color:var(--muted);margin-left:auto;display:flex;align-items:center;gap:6px}
+.dv-bar .st i{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.dv-bar .st.pending i{background:#e0a400}
+.dv-stage{overflow:auto;padding:4px 44px 30px 2px}
+.dv-hint{font-size:13px;color:var(--muted)}
+.statut{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:5px;padding:2px 7px;background:var(--surface-2);color:var(--muted);justify-self:end}
+.statut.envoye{background:#e6effa;color:#1f5aa6}.statut.accepte{background:#e3f4ea;color:#1e7a46}.statut.refuse{background:var(--zero-bg);color:var(--zero)}
+
+/* ---------- vue téléphone (assistant) ---------- */
+.dv-m{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding-bottom:96px}
+.dv-m h1{font-size:24px}
+.dv-m .big{height:56px;font-size:17px;border-radius:14px;width:100%}
+.dv-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
+.dv-steps{display:flex;gap:6px}
+.dv-steps i{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.dv-steps i.on{background:var(--red)}
+.dv-q{font-size:22px;font-weight:700;line-height:1.2;margin:4px 0 0}
+.dv-sub{color:var(--muted);font-size:14px;margin:-6px 0 0}
+.dv-m .field input,.dv-m .field textarea,.dv-m .field select{height:50px;font-size:16px;border-radius:12px}
+.dv-m .field textarea{height:auto;min-height:64px;padding:10px 12px;resize:vertical;border:1.5px solid var(--line);background:var(--bg);outline:none;width:100%}
+.dv-pick{display:flex;flex-direction:column;gap:8px}
+.dv-pick button{display:flex;align-items:center;gap:12px;text-align:left;border:1.5px solid var(--line);background:var(--surface);border-radius:14px;padding:12px 14px;cursor:pointer;width:100%}
+.dv-pick button.on{border-color:var(--red);box-shadow:0 0 0 3px rgba(192,0,0,.12)}
+.dv-pick .av{width:40px;height:40px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+.dv-pick b{display:block;font-size:16px}
+.dv-pick span{font-size:13px;color:var(--muted)}
+.dv-chips{display:flex;flex-wrap:wrap;gap:8px}
+.dv-chips button{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:9px 14px;font-size:15px;cursor:pointer}
+.dv-chips button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.dv-line{display:flex;flex-direction:column;gap:8px}
+.dv-line .row{display:grid;grid-template-columns:1fr 132px;gap:8px;align-items:end}
+.dv-line .stepper{display:flex;align-items:center;border:1.5px solid var(--line);border-radius:12px;height:50px;overflow:hidden;background:var(--bg)}
+.dv-line .stepper button{width:42px;height:100%;border:0;background:transparent;font-size:22px;cursor:pointer}
+.dv-line .stepper input{width:46px;border:0;background:transparent;text-align:center;font-size:17px;font-weight:700;outline:none;height:100%}
+.dv-line .lt{display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--muted)}
+.dv-line .lt b{color:var(--ink);font-size:16px}
+.dv-line .del{border:0;background:none;color:var(--zero);font-weight:600;cursor:pointer;padding:4px 0}
+.dv-seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.dv-seg button{height:48px;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;font-size:15px;font-weight:600;cursor:pointer}
+.dv-seg button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.dv-sum{display:flex;flex-direction:column;gap:4px;font-size:15px}
+.dv-sum div{display:flex;justify-content:space-between}
+.dv-sum .ttc{font-size:19px;font-weight:700;border-top:1px solid var(--line);padding-top:6px;margin-top:2px}
+.dv-nav{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--surface);border-top:1px solid var(--line);
+  padding:10px max(16px,env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));display:flex;gap:10px;align-items:center}
+.dv-nav .tt{flex:1;font-size:13px;color:var(--muted);line-height:1.2}
+.dv-nav .tt b{display:block;color:var(--ink);font-size:17px}
+.dv-nav .btn{height:50px;font-size:16px;padding:0 18px}
+.dv-prev{overflow:hidden;border-radius:10px;border:1px solid var(--line);background:#fff}
+.dv-prev .a4{transform-origin:top left;box-shadow:none}
+.dv-mitem{display:grid;grid-template-columns:1fr auto;gap:2px 10px;text-align:left;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer}
+.dv-mitem b{font-size:16px}.dv-mitem span{color:var(--muted);font-size:13px}.dv-mitem em{font-style:normal;font-weight:700;text-align:right}
+.dv-edit{display:flex;flex-wrap:wrap;gap:8px}
+.dv-edit button{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer}
+
+/* ---------- fenêtre « Envoyer par mail » ---------- */
+#dvMail .dlg{gap:12px}
+#dvMail .from{font-size:13px;color:var(--muted)}
+#dvMail .from b{color:var(--ink)}
+#dvMail textarea{width:100%;min-height:150px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);padding:10px;font:inherit;outline:none;resize:vertical}
+#dvMail .att{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:10px;padding:10px 12px;font-size:14px}
+#dvMail .att i{font-style:normal;background:var(--red);color:#fff;font-size:11px;font-weight:700;border-radius:4px;padding:3px 5px}
+#dvMail .steps{font-size:13px;color:var(--muted);margin:0;padding-left:18px}
+.pdf-stage{position:fixed;left:-10000px;top:0}
+
+body:has(.dv-nav) .toast{bottom:calc(84px + env(safe-area-inset-bottom))}
+.dv-m textarea,.dv-m input{font:inherit;font-size:16px}
+.a4 .autoliq{margin:6px 0 0 auto;width:330px;text-align:right;font-size:11.5px;font-weight:700;color:#1a1a1a}
+.dv-statut button{font-size:14px;padding:0 4px}
+.dv-statut button.on.st-envoye{background:#1f5aa6;border-color:#1f5aa6}
+.dv-statut button.on.st-accepte{background:#1e7a46;border-color:#1e7a46}
+.dv-statut button.on.st-refuse{background:#c00000;border-color:#c00000}
+#dvMail .cc{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px;background:var(--surface-2);border-radius:10px;padding:8px 12px}
+#dvMail .cc span{color:var(--muted)}
