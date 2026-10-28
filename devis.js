@@ -140,24 +140,26 @@
   }
 
   /* ---------- PDF et mail (communs PC / téléphone) ---------- */
-  async function makePDF(d) {
+  // o (facultatif) : { html, title, name, texts, label } pour réutiliser PDF et mail ailleurs (factures)
+  async function makePDF(d, o = {}) {
     if (!window.html2canvas || !window.jspdf) throw new Error("Le module PDF n'est pas chargé : ouvrez RSG une fois avec Internet.");
-    const holder = document.createElement("div"); holder.className = "pdf-stage"; holder.innerHTML = page(d, false);
+    const holder = document.createElement("div"); holder.className = "pdf-stage"; holder.innerHTML = o.html || page(d, false);
     document.body.appendChild(holder);
     const el = holder.firstElementChild; el.style.boxShadow = "none";
     await Promise.all([...el.querySelectorAll("img")].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
     try {
       const canvas = await window.html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-      const pdf = new window.jspdf.jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
-      let w = 190, h = w * canvas.height / canvas.width;
-      if (h > 277) { h = 277; w = h * canvas.width / canvas.height; }
-      pdf.setProperties({ title: `Devis ${d.numero}`, author: "RSG – Réalisations Soudures Générales" });
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", (210 - w) / 2, (297 - h) / 2, w, h);
+      const L = !!o.landscape, PW = L ? 297 : 210, PH = L ? 210 : 297;
+      const pdf = new window.jspdf.jsPDF({ unit: "mm", format: "a4", orientation: L ? "landscape" : "portrait" });
+      let w = PW - 20, h = w * canvas.height / canvas.width;
+      if (h > PH - 20) { h = PH - 20; w = h * canvas.width / canvas.height; }
+      pdf.setProperties({ title: o.title || `Devis ${d.numero}`, author: "RSG – Réalisations Soudures Générales" });
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", (PW - w) / 2, (PH - h) / 2, w, h);
       return pdf.output("blob");
     } finally { holder.remove(); }
   }
-  async function savePDF(d) {
-    const name = fileName(d), blob = await makePDF(d);
+  async function savePDF(d, o = {}) {
+    const name = o.name || fileName(d), blob = await makePDF(d, o);
     if (window.RSG_SAVE_FILE) return window.RSG_SAVE_FILE(name, blob);            // simulation
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000);
@@ -188,30 +190,34 @@
     </form></dialog>`);
     $("#dvMail [data-close]").onclick = () => $("#dvMail").close();
   }
-  function openMail(d, after) {
+  function openMail(d, after, o = {}) {
     ensureMailDialog();
-    const m = mailTexts(d), phone = mobile();
-    $("#dvTo").value = m.to; $("#dvSub").value = m.subject; $("#dvBody").value = m.body; $("#dvAtt").textContent = fileName(d);
+    const m = o.texts || mailTexts(d), phone = mobile(), label = o.label || "devis", fname = o.name || fileName(d);
+    const fixed = o.fixedTo || "";                 // destinataire imposé (pointages : uniquement l'adresse RSG)
+    const du = o.what || (label === "devis" ? "du devis" : "de la facture");
+    $("#dvMail h3").textContent = o.dialogTitle || `Envoyer ${label === "devis" ? "le devis" : "la facture"} par mail`;
+    $("#dvTo").readOnly = !!fixed; $("#dvMail .cc").hidden = !!fixed;
+    $("#dvTo").value = fixed || m.to; $("#dvSub").value = m.subject; $("#dvBody").value = m.body; $("#dvAtt").textContent = fname;
     $("#dvErr").textContent = "";
     // copie obligatoire vers l'adresse RSG, en copie cachée (le client ne la voit pas)
     $("#dvSteps").innerHTML = (phone
-      ? "<li>Le PDF du devis est enregistré dans le dossier <b>Téléchargements</b> du téléphone.</li><li>Gmail s'ouvre avec le destinataire, la copie à " + ENT.mail + ", l'objet et le message déjà remplis.</li><li>Touchez 📎 → <b>Joindre un fichier</b> → Téléchargements, choisissez le PDF, puis Envoyer.</li>"
-      : "<li>Le PDF du devis est enregistré sur ce PC (dossier Téléchargements).</li><li>Gmail s'ouvre sur le compte <b>" + ENT.mail + "</b>, avec le destinataire, la copie, l'objet et le message déjà remplis.</li><li>Glissez le PDF dans le message, puis cliquez Envoyer.</li>");
+      ? "<li>Le PDF " + du + " est enregistré dans le dossier <b>Téléchargements</b> du téléphone.</li><li>Gmail s'ouvre avec le destinataire" + (fixed ? "" : ", la copie à " + ENT.mail) + ", l'objet et le message déjà remplis.</li><li>Touchez 📎 → <b>Joindre un fichier</b> → Téléchargements, choisissez le PDF, puis Envoyer.</li>"
+      : "<li>Le PDF " + du + " est enregistré sur ce PC (dossier Téléchargements).</li><li>Gmail s'ouvre sur le compte <b>" + ENT.mail + "</b>, avec le destinataire" + (fixed ? "" : ", la copie") + ", l'objet et le message déjà remplis.</li><li>Glissez le PDF dans le message, puis cliquez Envoyer.</li>");
     $("#dvSend").textContent = "Préparer dans Gmail";
     $("#dvSend").onclick = async () => {
-      const to = $("#dvTo").value.trim(), su = $("#dvSub").value, body = $("#dvBody").value;
+      const to = fixed || $("#dvTo").value.trim(), su = $("#dvSub").value, body = $("#dvBody").value;
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) { $("#dvErr").textContent = "Indiquez l'adresse e-mail du client."; $("#dvTo").focus(); return; }
       const btn = $("#dvSend"); btn.disabled = true; btn.textContent = "Préparation du PDF…";
       try {
-        if (window.RSG_SIM_MAIL) { await window.RSG_SIM_MAIL({ from: ENT.mail, to, bcc: ENT.mail, subject: su, body, file: fileName(d), blob: await makePDF(d) }); }
+        if (window.RSG_SIM_MAIL) { await window.RSG_SIM_MAIL({ from: ENT.mail, to, bcc: fixed ? "" : ENT.mail, subject: su, body, file: fname, blob: await makePDF(d, o) }); }
         else if (phone) {
-          await savePDF(d);
-          location.href = "mailto:" + encodeURIComponent(to) + "?bcc=" + encodeURIComponent(ENT.mail) +
-            "&subject=" + encodeURIComponent(su) + "&body=" + encodeURIComponent(body);
+          await savePDF(d, o);
+          location.href = "mailto:" + encodeURIComponent(to) + "?" + (fixed ? "" : "bcc=" + encodeURIComponent(ENT.mail) + "&") +
+            "subject=" + encodeURIComponent(su) + "&body=" + encodeURIComponent(body);
         } else {
-          await savePDF(d);
+          await savePDF(d, o);
           const url = "https://mail.google.com/mail/?view=cm&fs=1&authuser=" + encodeURIComponent(ENT.mail) +
-            "&to=" + encodeURIComponent(to) + "&bcc=" + encodeURIComponent(ENT.mail) +
+            "&to=" + encodeURIComponent(to) + (fixed ? "" : "&bcc=" + encodeURIComponent(ENT.mail)) +
             "&su=" + encodeURIComponent(su) + "&body=" + encodeURIComponent(body);
           window.open(url, "_blank", "noopener");
         }
@@ -329,6 +335,7 @@
       main.innerHTML = `<div class="dv-bar">
           <button class="btn primary" data-act="pdf">Enregistrer en PDF sur le PC</button>
           <button class="btn" data-act="mail">Envoyer par mail</button>
+          <button class="btn" data-act="facturer" title="Transformer ce devis en facture">Facturer</button>
           <button class="btn" data-act="dup">Dupliquer</button>
           <select class="btn" data-act="statut" aria-label="Statut du devis">${Object.entries(STATUTS).map(([k, v]) => `<option value="${k}" ${d.statut === k ? "selected" : ""}>${v}</option>`).join("")}</select>
           <button class="btn danger" data-act="del">Supprimer</button>
@@ -433,6 +440,7 @@
       if (a === "addline") { this.draft.lignes = cleanLines(this.draft).lignes; this.draft.lignes.push({ d: "", pu: "", q: 1 }); this.renderPage(); refocus(this.el, `lignes.${this.draft.lignes.length - 1}.d`); }
       if (a === "pdf") { await this.flush(); try { const r = await savePDF(cleanLines(this.draft)); if (r === "saved") toast("PDF enregistré dans Téléchargements : " + fileName(this.draft)); } catch (err) { if (err?.code !== "declined") toast(err.message || String(err)); } }
       if (a === "mail") { await this.flush(); openMail(cleanLines(this.draft), () => { if (this.draft.statut === "brouillon") { this.draft.statut = "envoye"; this.queueSave(); this.renderPage(); } }); }
+      if (a === "facturer") { if (!canEdit()) return; await this.flush(); if (this.selId) window.factureTab?.openCreate(this.selId); return; }
       if (a === "dup") {
         if (!canEdit()) return;
         await this.flush(); const copy = normalize(this.draft); copy.date = isoToday(); copy.numero = nextNumero(copy.date); copy.statut = "brouillon";
@@ -510,6 +518,7 @@
           <div class="dv-card"><div class="field"><label>Statut du devis</label></div>
             <div class="dv-seg dv-statut">${Object.entries(STATUTS).map(([k, v]) => `<button data-mstatut="${k}" class="st-${k} ${(d.statut || "brouillon") === k ? "on" : ""}" aria-pressed="${(d.statut || "brouillon") === k}">${v}</button>`).join("")}</div></div>
           <button class="btn primary big" data-act="mmail">Envoyer par mail</button>
+          <button class="btn big" data-act="mfacturer">Facturer ce devis</button>
           <button class="btn big" data-act="mpdf">Enregistrer le PDF</button>
           <div class="dv-edit"><span class="dv-sub" style="margin:0;align-self:center">Modifier :</span>${["Client", "Chantier", "Prestations", "Conditions"].map((n, i) => `<button data-goto="${i + 1}">${n}</button>`).join("")}</div>
           <button class="btn danger" data-act="mdelete">Supprimer ce devis</button>`;
@@ -581,6 +590,7 @@
         if (m.step === 3 && !m.draft.lignes.length) m.draft.lignes.push({ d: "", pu: "", q: 1 });   // une première ligne vide, prête à remplir
         return this.renderM();
       }
+      if (a === "mfacturer") { if (!canEdit()) return; if (await this.saveM()) window.factureTab?.openCreate(m.id); return; }
       if (a === "mpdf") { try { const r = await savePDF(m.draft); if (r === "saved") toast("PDF enregistré : " + fileName(m.draft)); } catch (err) { if (err?.code !== "declined") toast(err.message || String(err)); } }
       if (a === "mmail") openMail(m.draft, async () => { if (m.draft.statut === "brouillon") { m.draft.statut = "envoye"; await this.saveM(); } toast("Devis envoyé"); });
       if (a === "mdelete") {
@@ -606,4 +616,7 @@
   addEventListener("resize", () => fitPreview());
 
   window.devisTab = tab;
+  // outils partagés avec l'onglet « Création de facture »
+  window.devisKit = { ENT, LOGO, AUTOLIQ, TVAS, ACOMPTES, eur, pctTxt, money, num, isoToday, frDate, mobile, clone, initials,
+    calc, normalize, cleanLines, setPath, cleanName, makePDF, savePDF, openMail, saveClientOf, grow, caretOf, refocus, fitPreview };
 })();

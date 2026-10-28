@@ -14,6 +14,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="stylesheet" href="devis.css">
 <script src="devis.js"></script>
+<link rel="stylesheet" href="pointage.css">
+<script src="pointage.js"></script>
+<link rel="stylesheet" href="factures.css">
+<script src="factures.js"></script>
 <style>
 /* RSG : bandeau noir du logo + barre d'onglets ; chaque onglet occupe la zone principale. */
 :root{
@@ -303,8 +307,8 @@ const store = {
   list(col) { return [...(this.data[col]?.values() || [])]; },
   get(col, id) { return this.data[col]?.get(id); },
   put(col, doc) { (this.data[col] ||= new Map()).set(doc.id, doc); },
-  async create(col, doc) {
-    const id = newId(), body = { ...doc }; delete body.id;
+  async create(col, doc, fixedId) {
+    const id = fixedId || newId(), body = { ...doc }; delete body.id;
     const { error } = await this.sb.from("docs").insert({ collection: col, id, data: body });
     this.check(error);
     const d = { ...body, id }; this.put(col, d); this.saveCache(); return d;
@@ -581,24 +585,13 @@ $("#d-del").onclick = () => {
 /* ---------- Onglet 2 : Création de devis (fichier devis.js) ---------- */
 const devis = window.devisTab;
 
-/* ---------- Onglet 3 : Création de facture (à construire) ---------- */
-const factures = {
-  id: "factures",
-  title: "Création de facture",
-  soon: true,
-  collection: null,          // donnera "factures" quand l'onglet sera réalisé
-  mount(el) {
-    el.innerHTML = `<div class="soonpage">
-      <div class="mark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></div>
-      <h1>Création de facture</h1>
-      <p>Cet onglet est en préparation. Il permettra de créer vos factures dans RSG, sur le PC comme sur le téléphone, par exemple à partir d'un devis accepté.</p>
-      <button class="btn primary back" data-tab="devis">Aller aux devis</button>
-    </div>`;
-  },
-  render() {},
-};
+/* ---------- Onglet Pointage RSG (fichier pointage.js), en première position ---------- */
+const pointage = window.pointageTab;
 
-const TABS = [barres, devis, factures];   // les prochains onglets s'ajouteront ici
+/* ---------- Onglet Création de facture (fichier factures.js) ---------- */
+const factures = window.factureTab;
+
+const TABS = [pointage, barres, devis, factures];   // les prochains onglets s'ajouteront ici
 let current = null;
 function showTab(id) {
   const t = TABS.find(x => x.id === id) || TABS[0];
