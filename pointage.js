@@ -97,6 +97,44 @@
       }
       return { ch: [...ch.values()].map(x => ({ nom: x.nom, h: x.h, j: x.j.size })), days, total, nbJours: days.length };
     },
+    // Synthèse d'un chantier : sur un mois (ym) ou depuis le début (ym = null)
+    chantierStats(ym, nom) {
+      const pers = new Map(), byDay = new Map(); let total = 0;
+      const docs = this.all().filter(d => !ym || String(d.date || "").startsWith(ym))
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.slot - b.slot);
+      for (const d of docs) {
+        for (const b of this.blocks(d)) {
+          if (key(b.c || SANS) !== key(nom)) continue;
+          const pn = this.label(d), k = key(pn), n = b.hours.length;
+          if (!pers.has(k)) pers.set(k, { nom: pn, h: 0, j: new Set() });
+          const x = pers.get(k); x.h += n; x.j.add(d.date); total += n;
+          if (!byDay.has(d.date)) byDay.set(d.date, []);
+          byDay.get(d.date).push({ pers: pn, from: b.from, to: b.to, t: b.t, h: n });
+        }
+      }
+      const days = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, rows]) => ({ date, rows }));
+      return { pers: [...pers.values()].map(x => ({ nom: x.nom, h: x.h, j: x.j.size })), days, total, nbJours: days.length,
+        first: days[0]?.date, last: days.at(-1)?.date };
+    },
+    chantierSheet(ym, nom, extra = "") {
+      const c = this.chantierStats(ym, nom), fr = iso => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR");
+      const per = ym ? frMonth(ym) : "Depuis le début du chantier";
+      return `<div class="pt-sheet pt-msheet" ${extra}>
+        <div class="pt-title"><img src="${LOGO()}" alt="RSG"><div><b>SYNTHÈSE CHANTIER</b><span>${esc(nom)} · ${per}</span></div></div>
+        <h2>1. Heures par personne</h2>
+        <table class="pt-sum"><thead><tr><th>Personne</th><th>Heures totales</th><th>Jours</th></tr></thead>
+          <tbody>${c.pers.length ? c.pers.map(x => `<tr><td>${esc(x.nom)}</td><td class="b">${H(x.h)}</td><td>${jours(x.j)}</td></tr>`).join("")
+            : `<tr><td colspan="3" class="empty">Aucune heure sur ce chantier pour cette période.</td></tr>`}</tbody></table>
+        <h2>2. Détail par jour</h2>
+        <table class="pt-sum pt-pday"><thead><tr><th>Date</th><th>Personne</th><th>Horaires</th><th>Travail effectué</th><th>Heures</th></tr></thead>
+          <tbody>${c.days.length ? c.days.map(d => d.rows.map((r, i) => `<tr class="${i ? "cont" : ""}">
+              <td>${i ? "" : esc(cap(new Date(d.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short", ...(ym ? {} : { year: "2-digit" }) })))}</td>
+              <td>${esc(r.pers)}</td><td>${pad(r.from)}h – ${pad(r.to)}h</td><td>${esc(r.t)}</td><td class="b">${r.h} h</td></tr>`).join("")).join("")
+            : `<tr><td colspan="5" class="empty">—</td></tr>`}</tbody></table>
+        <h2>3. Total des heures sur le chantier</h2>
+        <div class="pt-total"><span>Total ${esc(nom)}${c.first ? ` <small style="font-weight:400;opacity:.8">· du ${fr(c.first)} au ${fr(c.last)}</small>` : ""}</span><b>${c.total} h · ${jours(c.nbJours)}</b></div>
+      </div>`;
+    },
     personSheet(ym, nom, extra = "") {
       const p = this.personStats(ym, nom);
       return `<div class="pt-sheet pt-msheet" ${extra}>
@@ -200,7 +238,7 @@
       el.querySelector(".pt-seg").onclick = e => {
         const b = e.target.closest("[data-v]"); if (!b) return;
         this.view = b.dataset.v; if (this.view === "mois") this.month = this.date.slice(0, 7);
-        this.person = null; this.built = ""; this.renderPc();
+        this.person = null; this.chantier = null; this.built = ""; this.renderPc();
       };
       if (!this.pcBound) this.bindPc(el);
       this.renderPc();
@@ -214,8 +252,10 @@
         if (n) { if (this.view === "jour") this.date = addDays(this.date, +n.dataset.nav); else this.month = addMonths(this.month, +n.dataset.nav); return this.renderPc(); }
         const ml = e.target.closest("[data-mail]"); if (ml) return this.sendMail(ml.dataset.mail);
         if (e.target.closest("[data-today]")) { this.date = isoToday(); this.month = this.date.slice(0, 7); return this.renderPc(); }
-        const pr = e.target.closest("[data-person]"); if (pr) { this.person = pr.dataset.person; return this.renderPc(); }
-        if (e.target.closest("[data-person-back]")) { this.person = null; return this.renderPc(); }
+        const pr = e.target.closest("[data-person]"); if (pr) { this.person = pr.dataset.person; this.chantier = null; return this.renderPc(); }
+        const chx = e.target.closest("[data-chantier]"); if (chx) { this.chantier = chx.dataset.chantier; this.chScope = "mois"; this.person = null; return this.renderPc(); }
+        const sc = e.target.closest("[data-scope]"); if (sc) { this.chScope = sc.dataset.scope; return this.renderPc(); }
+        if (e.target.closest("[data-person-back]")) { this.person = null; this.chantier = null; return this.renderPc(); }
         const dj = e.target.closest("[data-day]");
         if (dj) { this.date = dj.dataset.day; this.view = "jour"; return this.renderPc(); }
       });
@@ -325,8 +365,8 @@
       const m = this.monthStats(ym);
       const table = (titre, col, list, vide, pers) => `<h2>${titre}</h2>
         <table class="pt-sum"><thead><tr><th>${col}</th><th>Heures totales</th><th>Jours</th></tr></thead>
-        <tbody>${list.length ? list.map(x => pers && click
-          ? `<tr class="click" data-person="${esc(x.nom)}" title="Voir le détail de ${esc(x.nom)} par chantier"><td><span class="plink">${esc(x.nom)}</span><i class="go">Détail ›</i></td><td class="b">${H(x.h)}</td><td>${jours(x.j)}</td></tr>`
+        <tbody>${list.length ? list.map(x => click
+          ? `<tr class="click" ${pers ? "data-person" : "data-chantier"}="${esc(x.nom)}" title="Voir le détail de ${esc(x.nom)}"><td><span class="plink">${esc(x.nom)}</span><i class="go">Détail ›</i></td><td class="b">${H(x.h)}</td><td>${jours(x.j)}</td></tr>`
           : `<tr><td>${esc(x.nom)}</td><td class="b">${H(x.h)}</td><td>${jours(x.j)}</td></tr>`).join("")
           : `<tr><td colspan="3" class="empty">${vide}</td></tr>`}</tbody></table>`;
       return `<div class="pt-sheet pt-msheet" ${extra}>
@@ -334,6 +374,7 @@
             ${table("1. Heures totales par personne", "Personne", m.pers, "Aucune heure pointée ce mois-ci.", true)}
             ${click && m.pers.length ? `<p class="pt-note noprint">Cliquez sur le nom d'une personne pour voir ses heures sur chaque chantier.</p>` : ""}
             ${table("2. Heures totales réalisées par chantier", "Chantier", m.ch, "Aucun chantier ce mois-ci.")}
+            ${click && m.ch.length ? `<p class="pt-note noprint">Cliquez sur un chantier pour voir qui y a travaillé et combien de temps.</p>` : ""}
             <h2>3. Total des heures du mois</h2>
             <div class="pt-total"><span>Total des heures du mois</span><b>${m.total} h</b></div>
             <p class="pt-note">Un même chantier ou une même personne doit toujours être écrit de la même façon pour être additionné sur la même ligne.</p>
@@ -355,6 +396,35 @@
         <div class="pt-sign">Signature :</div>
       </div></div>`;
     },
+    // Sauvegarde PDF (Réglages) : pour chaque mois de la période, le mensuel, le récapitulatif
+    // de chaque personne et chaque journée pointée.
+    exportPdf(p) {
+      const k = window.devisKit, jobs = [];
+      const docs = this.all().filter(d => this.hoursOf(d).length && (!p || (d.date >= p.from && d.date <= p.to)));
+      const months = [...new Set(docs.map(d => d.date.slice(0, 7)))].sort();
+      for (const ym of months) {
+        const dir = `Pointage/${ym}/`, wrap = h => `<div class="pt pt-pdf">${h}</div>`;
+        jobs.push({ path: dir + `Pointage mensuel RSG - ${ym}.pdf`, make: () => k.makePDF({}, { html: wrap(this.monthSheet(ym, 'style="width:794px"')) }) });
+        for (const x of this.monthStats(ym).pers) {
+          const slug = String(x.nom).replace(/[\\/:*?"<>|]+/g, "-");
+          jobs.push({ path: dir + `Personnes/Récapitulatif ${slug} - ${ym}.pdf`, make: () => k.makePDF({}, { html: wrap(this.personSheet(ym, x.nom, 'style="width:794px"')) }) });
+        }
+        for (const x of this.monthStats(ym).ch) {
+          const slug = String(x.nom).replace(/[\\/:*?"<>|]+/g, "-");
+          jobs.push({ path: dir + `Chantiers/Synthèse ${slug} - ${ym}.pdf`, make: () => k.makePDF({}, { html: wrap(this.chantierSheet(ym, x.nom, 'style="width:794px"')) }) });
+        }
+        for (const date of [...new Set(docs.filter(d => d.date.startsWith(ym)).map(d => d.date))].sort())
+          jobs.push({ path: dir + `Jours/Pointage journalier RSG - ${date}.pdf`, make: () => k.makePDF({}, { html: this.dayHtml(date), landscape: true }) });
+      }
+      if (!p) {                                   // période « Tout » : aussi la synthèse de chaque chantier depuis le début
+        const chs = new Map(); docs.forEach(d => this.blocks(d).forEach(b => { const c = b.c || SANS; if (!chs.has(key(c))) chs.set(key(c), c); }));
+        for (const c of chs.values()) {
+          const slug = String(c).replace(/[\\/:*?"<>|]+/g, "-");
+          jobs.push({ path: `Pointage/Chantiers depuis le début/Synthèse ${slug}.pdf`, make: () => k.makePDF({}, { html: `<div class="pt pt-pdf">${this.chantierSheet(null, c, 'style="width:794px"')}</div>` }) });
+        }
+      }
+      return jobs;
+    },
     sendMail(kind) {
       const k = window.devisKit; if (!k) return;
       this.flushAll();
@@ -369,6 +439,13 @@
           what: "du pointage journalier",
           texts: { to: ME, subject: `Pointage journalier RSG – ${frLong(this.date)}`,
             body: `Bonjour,\n\nCi-joint le pointage journalier du ${frLong(this.date).toLowerCase()}.\n\nHeures par personne :\n${list(pers)}\n\nHeures par chantier :\n${list(ch)}\n\nTotal de la journée : ${total} h\n\nRSG – Réalisations Soudures Générales` } };
+      } else if (kind === "chantier" && this.chantier) {
+        const nom = this.chantier, ym = this.chScope === "tout" ? null : this.month, c = this.chantierStats(ym, nom);
+        const slug = String(nom).replace(/[\\/:*?"<>|]+/g, "-"), per = ym ? frMonth(ym) : "depuis le début";
+        o = { html: `<div class="pt pt-pdf">${this.chantierSheet(ym, nom, 'style="width:794px"')}</div>`, title: `Chantier ${nom}`,
+          name: `Synthèse chantier ${slug} RSG - ${ym || "depuis le début"}.pdf`, what: `de la synthèse du chantier ${nom}`,
+          texts: { to: ME, subject: `Synthèse du chantier ${nom} – ${per} – RSG`,
+            body: `Bonjour,\n\nCi-joint la synthèse des heures du chantier ${nom} (${per.toLowerCase()}).\n\nHeures par personne :\n${list(c.pers)}\n\nTotal sur le chantier : ${c.total} h sur ${c.nbJours} jour${c.nbJours > 1 ? "s" : ""}.\n\nRSG – Réalisations Soudures Générales` } };
       } else if (kind === "personne" && this.person) {
         const nom = this.person, p = this.personStats(this.month, nom), slug = String(nom).replace(/[\\/:*?"<>|]+/g, "-");
         o = { html: `<div class="pt pt-pdf">${this.personSheet(this.month, nom, 'style="width:794px"')}</div>`, title: `Heures de ${nom} ${this.month}`,
@@ -396,12 +473,16 @@
           <b class="pt-mlabel">${frMonth(this.month)}</b>
           <button class="btn" data-nav="1" aria-label="Mois suivant">›</button>
           <button class="btn" data-today ${cur ? "disabled" : ""}>Mois en cours</button>
-          ${this.person ? `<button class="btn" data-person-back>‹ Retour au récapitulatif du mois</button>
+          ${this.chantier ? `<button class="btn" data-person-back>‹ Retour au récapitulatif du mois</button>
+          <span class="pt-scope"><button data-scope="mois" class="${this.chScope !== "tout" ? "on" : ""}">Ce mois-ci</button><button data-scope="tout" class="${this.chScope === "tout" ? "on" : ""}">Depuis le début</button></span>
+          <button class="btn primary" data-mail="chantier">Envoyer par mail</button>`
+          : this.person ? `<button class="btn" data-person-back>‹ Retour au récapitulatif du mois</button>
           <button class="btn primary" data-mail="personne">Envoyer par mail</button>` : `<button class="btn primary" data-mail="mois">Envoyer par mail</button>`}
           <span class="pt-hint">Calculé tout seul à partir des pointages journaliers : rien à remplir ici.</span>
         </div>
         <div class="pt-month">
-          ${this.person ? this.personSheet(this.month, this.person) : this.monthSheet(this.month, "", true)}
+          ${this.chantier ? this.chantierSheet(this.chScope === "tout" ? null : this.month, this.chantier)
+            : this.person ? this.personSheet(this.month, this.person) : this.monthSheet(this.month, "", true)}
           <aside class="pt-days">
             <h3>Jours du mois</h3>
             <div>${perDay.map(([d, n]) => { const wd = new Date(d + "T12:00:00").getDay();
@@ -428,7 +509,7 @@
     },
     renderM() {
       const body = this.el.querySelector("#ptBody"); if (!body) return;
-      this.el.querySelectorAll(".pt-mseg button").forEach(b => b.classList.toggle("on", b.dataset.v === this.view));
+      this.el.querySelectorAll(".pt-mseg button[data-v]").forEach(b => b.classList.toggle("on", b.dataset.v === this.view));
       body.innerHTML = this.view === "mois" ? this.monthM() : this.dayM();
     },
     blocks(d) {
@@ -485,13 +566,30 @@
           <b>${esc(frShort(d.date))}</b>${d.blocks.map(b => `<div class="row"><span><em>${pad(b.from)}h – ${pad(b.to)}h</em> ${esc(b.c || SANS)}${b.t ? `<small> · ${esc(b.t)}</small>` : ""}</span><b>${b.hours.length} h</b></div>`).join("")}</div>`).join("")}</div>` : ""}
         <button class="btn big" data-mail="personne">Envoyer le récapitulatif de ${esc(nom)} par mail</button>`;
     },
+    chantierM() {
+      const nom = this.chantier, tout = this.chScope === "tout", c = this.chantierStats(tout ? null : this.month, nom);
+      return `
+        <button class="btn pt-back" data-person-back>‹ Récapitulatif du mois</button>
+        <div class="pt-mdate">
+          ${tout ? "<span></span>" : `<button data-mnav="-1" aria-label="Mois précédent">‹</button>`}
+          <label><b>${esc(nom)}</b><span>${tout ? "Depuis le début" : frMonth(this.month)}</span></label>
+          ${tout ? "<span></span>" : `<button data-mnav="1" aria-label="Mois suivant">›</button>`}
+        </div>
+        <div class="dv-seg pt-mseg"><button data-scope="mois" class="${tout ? "" : "on"}">Ce mois-ci</button><button data-scope="tout" class="${tout ? "on" : ""}">Depuis le début</button></div>
+        <div class="dv-card pt-mdet"><h3>Heures par personne</h3>${c.pers.length
+          ? c.pers.map(x => `<div class="row"><span>${esc(x.nom)}</span><small>${jours(x.j)}</small><b>${x.h} h</b></div>`).join("")
+          : `<p class="small">Aucune heure sur ce chantier pour cette période.</p>`}
+          <div class="row tot"><span>Total sur le chantier</span><b>${c.total} h</b></div></div>
+        ${c.days.length ? `<div class="dv-card pt-mdet pt-mdays"><h3>Détail par jour</h3>${c.days.map(d => `<div class="pday">
+          <b>${esc(frShort(d.date))}${tout ? " " + d.date.slice(0, 4) : ""}</b>${d.rows.map(r => `<div class="row"><span><em>${pad(r.from)}h – ${pad(r.to)}h</em> ${esc(r.pers)}${r.t ? `<small> · ${esc(r.t)}</small>` : ""}</span><b>${r.h} h</b></div>`).join("")}</div>`).join("")}</div>` : ""}
+        <button class="btn big" data-mail="chantier">Envoyer la synthèse du chantier par mail</button>`;
+    },
     monthM() {
+      if (this.chantier) return this.chantierM();
       if (this.person) return this.personM();
       const m = this.monthStats(this.month);
       const list = (titre, arr, vide, pers) => `<div class="dv-card pt-mdet"><h3>${titre}</h3>${arr.length
-        ? arr.map(x => pers
-          ? `<button class="row click" data-person="${esc(x.nom)}"><span>${esc(x.nom)}</span><small>${jours(x.j)}</small><b>${x.h} h</b><i>›</i></button>`
-          : `<div class="row"><span>${esc(x.nom)}</span><small>${jours(x.j)}</small><b>${x.h} h</b></div>`).join("")
+        ? arr.map(x => `<button class="row click" ${pers ? "data-person" : "data-chantier"}="${esc(x.nom)}"><span>${esc(x.nom)}</span><small>${jours(x.j)}</small><b>${x.h} h</b><i>›</i></button>`).join("")
         : `<p class="small">${vide}</p>`}</div>`;
       return `
         <div class="pt-mdate">
@@ -502,6 +600,7 @@
         ${list("1. Heures totales par personne", m.pers, "Aucune heure pointée ce mois-ci.", true)}
         ${m.pers.length ? `<p class="small pt-tip">Touchez une personne pour voir ses heures sur chaque chantier.</p>` : ""}
         ${list("2. Heures totales réalisées par chantier", m.ch, "Aucun chantier ce mois-ci.")}
+        ${m.ch.length ? `<p class="small pt-tip">Touchez un chantier pour voir qui y a travaillé et combien de temps.</p>` : ""}
         <div class="dv-card pt-mdet"><h3>3. Total des heures du mois</h3><div class="row tot"><span>Total des heures du mois</span><b>${m.total} h</b></div></div>
         <button class="btn big" data-mail="mois">Envoyer le pointage du mois par mail</button>`;
     },
@@ -509,10 +608,12 @@
       if (current !== this || this.mode !== "m") return;
       const t = e.target;
       if (this.wz) return this.clickWz(e);
-      const pr = t.closest("[data-person]"); if (pr) { this.person = pr.dataset.person; window.scrollTo(0, 0); return this.renderM(); }
-      if (t.closest("[data-person-back]")) { this.person = null; return this.renderM(); }
+      const pr = t.closest("[data-person]"); if (pr) { this.person = pr.dataset.person; this.chantier = null; window.scrollTo(0, 0); return this.renderM(); }
+      const chx = t.closest("[data-chantier]"); if (chx) { this.chantier = chx.dataset.chantier; this.chScope = "mois"; this.person = null; window.scrollTo(0, 0); return this.renderM(); }
+      const sc = t.closest("[data-scope]"); if (sc) { this.chScope = sc.dataset.scope; return this.renderM(); }
+      if (t.closest("[data-person-back]")) { this.person = null; this.chantier = null; return this.renderM(); }
       const v = t.closest(".pt-mseg [data-v]");
-      if (v) { this.person = null; this.view = v.dataset.v; if (this.view === "mois") this.month = this.date.slice(0, 7); return this.renderM(); }
+      if (v) { this.person = null; this.chantier = null; this.view = v.dataset.v; if (this.view === "mois") this.month = this.date.slice(0, 7); return this.renderM(); }
       const n = t.closest("[data-mnav]");
       if (n) { if (this.view === "jour") this.date = addDays(this.date, +n.dataset.mnav); else this.month = addMonths(this.month, +n.dataset.mnav); return this.renderM(); }
       const ml = t.closest("[data-mail]"); if (ml) return this.sendMail(ml.dataset.mail);

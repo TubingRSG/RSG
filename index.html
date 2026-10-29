@@ -12,6 +12,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link rel="stylesheet" href="devis.css">
 <script src="devis.js"></script>
 <link rel="stylesheet" href="pointage.css">
@@ -172,6 +173,16 @@ details[open] summary{margin-bottom:10px}
 .qrbox svg,.qrbox img{display:block;width:220px;height:220px}
 .acct{background:var(--surface-2);border-radius:10px;padding:10px 12px;font-size:14px;overflow-wrap:anywhere}
 .small{font-size:13px;color:var(--muted)}
+/* sauvegarde PDF (réglages) */
+#info{max-height:calc(100dvh - 24px);overflow:auto}
+.bk{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:14px}
+.bk p{margin:0}
+.bk-checks{display:flex;flex-wrap:wrap;gap:6px}
+.bk-checks label{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:14px;cursor:pointer;background:var(--bg)}
+.bk-checks input{accent-color:var(--red);width:16px;height:16px}
+.bk-prog{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.bk-prog div{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.bk-prog i{display:block;height:100%;width:0;background:var(--red);transition:width .2s}
 /* consultation seule (hors connexion) */
 .readonly .add,.readonly #d-more,.readonly #d-del,.readonly #d-save,.readonly .qtybox .qbtn{display:none!important}
 .sync.cache i{background:#e0a400}
@@ -231,6 +242,15 @@ details[open] summary{margin-bottom:10px}
   </div>
   <div class="qrbox" id="qr"></div>
   <p class="small">Sur le téléphone, ajoutez ensuite RSG à l'écran d'accueil : dans Chrome, ⋮ → <b>Ajouter à l'écran d'accueil</b>.</p>
+  <div class="bk">
+    <b>Sauvegarde en PDF</b>
+    <p class="small">Crée un seul fichier ZIP avec tous les documents en PDF, rangés dans un dossier par onglet. Il s'enregistre dans Téléchargements.</p>
+    <div class="bk-checks" id="bkTabs"></div>
+    <div class="field"><label for="bkPeriod">Période (devis, factures, pointages)</label>
+      <select id="bkPeriod"><option value="mois">Ce mois-ci</option><option value="annee">Cette année</option><option value="tout" selected>Tout</option></select></div>
+    <div class="bk-prog" id="bkProg" hidden><div><i id="bkBar"></i></div><span id="bkTxt"></span></div>
+    <button class="btn primary" id="bkGo">Sauvegarder en PDF</button>
+  </div>
   <div class="foot">
     <button class="btn danger" id="logoutBtn">Se déconnecter</button>
     <span class="spacer"></span>
@@ -397,6 +417,28 @@ const barres = {
   open: null,
 
   where(p) { return `${RACKS[p.rack]?.label || p.rack} · Étage ${p.etage}`; },
+
+  // Sauvegarde PDF (Réglages) : l'état actuel du stock, rack par rack
+  exportPdf() {
+    const k = window.devisKit, today = k.isoToday(), list = store.list(this.collection);
+    const rack = (key, R) => {
+      let rows = "";
+      for (let e = R.etages; e >= 1; e--) {
+        const items = list.filter(p => p.rack === key && p.etage === e).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+        rows += items.length ? items.map((p, i) => `<tr><td style="padding:5px 8px;border-bottom:1px solid #d0d0d4;font-weight:700">${i ? "" : "Étage " + e}</td><td style="padding:5px 8px;border-bottom:1px solid #d0d0d4">${esc(p.nom)}</td><td style="padding:5px 8px;border-bottom:1px solid #d0d0d4;text-align:center;font-weight:700;${(p.qte || 0) <= 0 ? "color:#c00000" : ""}">${p.qte || 0}</td></tr>`).join("")
+          : `<tr><td style="padding:5px 8px;border-bottom:1px solid #d0d0d4;font-weight:700">Étage ${e}</td><td style="padding:5px 8px;border-bottom:1px solid #d0d0d4;color:#8a8a8a;font-style:italic">Vide</td><td style="border-bottom:1px solid #d0d0d4"></td></tr>`;
+      }
+      return `<h2 style="font-size:16px;color:#c00000;margin:18px 0 6px">${R.title}</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#1a1a1a;color:#fff"><th style="text-align:left;padding:6px 8px;width:22%">Étage</th><th style="text-align:left;padding:6px 8px">Produit</th><th style="padding:6px 8px;width:22%">Barres de 6 m</th></tr></thead><tbody>${rows}</tbody></table>`;
+    };
+    const total = list.reduce((s, p) => s + (p.qte || 0), 0);
+    const html = `<div style="width:794px;background:#fff;color:#1a1a1a;padding:30px 34px;font:13px/1.35 Calibri,Carlito,Arial,sans-serif;box-sizing:border-box">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #c00000;padding-bottom:6px">
+        <img src="${k.LOGO}" style="height:42px" alt="RSG"><div style="text-align:right"><b style="font-size:22px;display:block">RÉPERTOIRE DE STOCK BARRES 6M</b><span style="color:#c00000;font-weight:700;font-size:15px">État au ${k.frDate(today)}</span></div></div>
+      ${Object.entries(RACKS).map(([key, R]) => rack(key, R)).join("")}
+      <div style="margin-top:18px;background:#1a1a1a;color:#fff;padding:10px;display:flex;justify-content:space-between;font-weight:700"><span>${list.length} produits</span><span>${total} barres au total</span></div></div>`;
+    return [{ path: `Stock/Répertoire de stock barres 6m - ${today}.pdf`, make: () => k.makePDF({}, { html }) }];
+  },
   qty(p) { return Math.max(0, (p.qte || 0) + (this.pendingDelta.get(p.id) || 0)); },
 
   mount(el) {
@@ -620,8 +662,45 @@ $("#settingsBtn").onclick = () => {
   } else {
     $("#qrHelp").textContent = "Ouvrez RSG depuis son adresse en ligne pour afficher le code à scanner.";
   }
+  bkFill();
   $("#info").showModal();
 };
+/* ---------- Sauvegarde PDF : chaque onglet qui sait se mettre en PDF (exportPdf) apparaît ici tout seul ---------- */
+function bkFill() {
+  $("#bkTabs").innerHTML = TABS.filter(t => t.exportPdf).map(t => `<label><input type="checkbox" value="${t.id}" checked>${esc(t.title)}</label>`).join("");
+  $("#bkProg").hidden = true; $("#bkGo").disabled = false;
+}
+function bkPeriod(v) {
+  const t = window.devisKit.isoToday();
+  if (v === "mois") return { from: t.slice(0, 7) + "-01", to: t.slice(0, 7) + "-31" };
+  if (v === "annee") return { from: t.slice(0, 4) + "-01-01", to: t.slice(0, 4) + "-12-31" };
+  return null;
+}
+$("#bkGo").onclick = async () => {
+  if (!window.JSZip || !window.html2canvas || !window.jspdf) return toast("Les outils PDF ne sont pas chargés : ouvrez RSG une fois avec Internet.");
+  const ids = [...document.querySelectorAll("#bkTabs input:checked")].map(i => i.value);
+  if (!ids.length) return toast("Cochez au moins un onglet.");
+  const p = bkPeriod($("#bkPeriod").value);
+  const jobs = TABS.filter(t => t.exportPdf && ids.includes(t.id)).flatMap(t => t.exportPdf(p));
+  if (!jobs.length) return toast("Aucun document sur cette période.");
+  const btn = $("#bkGo"); btn.disabled = true; $("#bkProg").hidden = false;
+  const zip = new window.JSZip(); let errors = 0;
+  try {
+    for (let i = 0; i < jobs.length; i++) {
+      $("#bkTxt").textContent = `PDF ${i + 1} sur ${jobs.length} : ${jobs[i].path.split("/").pop()}`;
+      $("#bkBar").style.width = Math.round(i / jobs.length * 100) + "%";
+      try { zip.file(jobs[i].path, await jobs[i].make()); } catch { errors++; }
+    }
+    $("#bkTxt").textContent = "Création du fichier ZIP…"; $("#bkBar").style.width = "100%";
+    const blob = await zip.generateAsync({ type: "blob" });
+    const name = `Sauvegarde PDF RSG - ${window.devisKit.isoToday()}.zip`;
+    if (window.RSG_SAVE_FILE) await window.RSG_SAVE_FILE(name, blob);
+    else { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000); }
+    $("#bkTxt").textContent = `Terminé : ${jobs.length - errors} PDF dans « ${name} » (dossier Téléchargements).` + (errors ? ` ${errors} document(s) n'ont pas pu être créés.` : "");
+  } catch (e) { $("#bkTxt").textContent = "Sauvegarde impossible : " + (e.message || e); }
+  finally { btn.disabled = false; }
+};
+
 $("#logoutBtn").onclick = async () => {
   $("#info").close();
   try { await store.sb?.auth.signOut(); } catch {}

@@ -148,7 +148,7 @@
 #dvMail .att{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:10px;padding:10px 12px;font-size:14px}
 #dvMail .att i{font-style:normal;background:var(--red);color:#fff;font-size:11px;font-weight:700;border-radius:4px;padding:3px 5px}
 #dvMail .steps{font-size:13px;color:var(--muted);margin:0;padding-left:18px}
-.pdf-stage{position:fixed;left:-10000px;top:0}
+.pdf-stage{position:fixed;left:-10000px;top:0;--a4w:794px}
 
 body:has(.dv-nav) .toast{bottom:calc(84px + env(safe-area-inset-bottom))}
 .dv-m textarea,.dv-m input{font:inherit;font-size:16px}

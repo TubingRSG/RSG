@@ -255,6 +255,7 @@
   /* =================================================================
      L'onglet
      ================================================================= */
+  const inPeriod = (iso, p) => !p || (String(iso || "") >= p.from && String(iso || "") <= p.to);
   const tab = {
     id: "devis",
     title: "Création de devis",
@@ -265,6 +266,11 @@
     // téléphone
     m: { screen: "list", step: 1, id: null, draft: null, newClient: false, cq: "" },
 
+    // Sauvegarde PDF (Réglages) : un PDF par devis de la période
+    exportPdf(p) {
+      return this.sortedList().filter(d => inPeriod(d.date, p)).map(d => { const n = cleanLines(normalize(d));
+        return { path: "Devis/" + fileName(n), make: () => makePDF(n) }; });
+    },
     mount(el) {
       this.el = el; this.mode = mobile() ? "m" : "pc";
       if (!this.bound) {

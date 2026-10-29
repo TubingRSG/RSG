@@ -146,6 +146,11 @@
     selId: null, draft: null, dirty: false, saving: false, timer: null, q: "",
     m: { screen: "list", id: null },
 
+    // Sauvegarde PDF (Réglages) : un PDF par facture de la période
+    exportPdf(p) {
+      return this.sorted().filter(f => !p || (String(f.date || "") >= p.from && String(f.date || "") <= p.to)).map(f => { const n = K().cleanLines(normalize(f));
+        return { path: "Factures/" + fileName(n), make: () => K().makePDF(n, pdfOpts(n)) }; });
+    },
     mount(el) {
       this.el = el; this.mode = K().mobile() ? "m" : "pc";
       if (!this.bound) {
