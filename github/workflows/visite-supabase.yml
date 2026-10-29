@@ -1,0 +1,41 @@
+# RSG — visite automatique de la base Supabase tous les 3 jours,
+# pour qu'elle ne soit jamais mise en pause (offre gratuite : pause après 7 jours sans activité).
+name: Visite automatique de la base RSG
+
+on:
+  schedule:
+    - cron: "17 6 */3 * *"   # les 1, 4, 7, 10, 13, 16, 19, 22, 25, 28 et 31 du mois, vers 7h (heure de Paris) : jamais plus de 3 jours d'écart
+  workflow_dispatch:          # bouton « Run workflow » pour lancer une visite à la main
+
+permissions:
+  contents: write
+
+jobs:
+  visite:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Interroger la base Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "Il manque les secrets SUPABASE_URL et SUPABASE_KEY (Settings > Secrets and variables > Actions)."; exit 1
+          fi
+          code=$(curl -s -o /dev/null -w "%{http_code}" "${SUPABASE_URL%/}/rest/v1/docs?select=id&limit=1" -H "apikey: $SUPABASE_KEY")
+          echo "Réponse de la base : $code"
+          if [ "$code" != "200" ]; then
+            echo "La base ne répond pas normalement : elle est peut-être en pause (Supabase > projet RSG > Resume project)."; exit 1
+          fi
+
+      # Une petite trace dans le dépôt : elle garde aussi la visite active côté GitHub
+      # (GitHub arrête les tâches planifiées d'un dépôt sans activité pendant 60 jours).
+      - uses: actions/checkout@v4
+      - name: Noter la date de la visite
+        run: |
+          date -u +"Dernière visite automatique de la base RSG : %d/%m/%Y %H:%M (UTC)" > derniere-visite.txt
+          git config user.name "RSG visite automatique"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add derniere-visite.txt
+          git commit -m "Visite automatique de la base RSG" || exit 0
+          git push
