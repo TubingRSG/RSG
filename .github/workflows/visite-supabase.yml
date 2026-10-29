@@ -22,9 +22,16 @@ jobs:
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
             echo "Il manque les secrets SUPABASE_URL et SUPABASE_KEY (Settings > Secrets and variables > Actions)."; exit 1
           fi
-          code=$(curl -s -o /dev/null -w "%{http_code}" "${SUPABASE_URL%/}/rest/v1/docs?select=id&limit=1" -H "apikey: $SUPABASE_KEY")
+          code=$(curl -s -o reponse.txt -w "%{http_code}" "${SUPABASE_URL%/}/rest/v1/docs?select=id&limit=1" -H "apikey: $SUPABASE_KEY")
           echo "Réponse de la base : $code"
-          if [ "$code" != "200" ]; then
+          cat reponse.txt; echo
+          # 200 : la base a répondu. 401 avec « permission denied » (42501) : la base a bien été interrogée,
+          # elle refuse seulement de montrer les données sans connexion : c'est normal et sans danger.
+          if [ "$code" = "200" ] || grep -q '"42501"' reponse.txt; then
+            echo "Visite réussie : la base RSG est active."
+          elif grep -qi "api key" reponse.txt; then
+            echo "La clé SUPABASE_KEY n'est pas acceptée : recopiez la clé publishable (sb_publishable_...) dans le secret."; exit 1
+          else
             echo "La base ne répond pas normalement : elle est peut-être en pause (Supabase > projet RSG > Resume project)."; exit 1
           fi
 
