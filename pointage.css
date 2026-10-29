@@ -160,3 +160,26 @@
 .pt-pdf .pt-grid tbody td.c{font-weight:600}
 .pt-pdf .pt-grid thead th.pn{font-size:14px;color:#1a1a1a}
 .pt-pdf .pt-sign{margin-top:12px;font-size:13px;font-weight:700;color:#c00000;height:40px}
+
+/* récapitulatif par personne */
+.pt-sum tr.click{cursor:pointer}
+.pt-sum tr.click:hover td{background:#fde4e4!important}
+.pt-sum .plink{font-weight:700;color:#c00000;text-decoration:underline;text-underline-offset:2px}
+.pt-sum .go{font-style:normal;font-size:11px;color:#8a8a8a;margin-left:10px}
+.pt-sum tr.click:hover .go{color:#c00000}
+.pt-pday th:nth-child(1){width:18%}.pt-pday th:nth-child(2){width:16%;text-align:center}.pt-pday th:nth-child(3){width:22%;text-align:left}
+.pt-pday th:nth-child(4){width:32%;text-align:left}.pt-pday th:nth-child(5){width:12%}
+.pt-pday td{font-size:12.5px}
+.pt-pday td:nth-child(3),.pt-pday td:nth-child(4){text-align:left}
+.pt-pday tr.cont td{border-top:0}
+.pt-pdf .noprint{display:none}
+.pt-mdet button.row{width:100%;background:none;border:0;border-top:1px solid var(--line);text-align:left;color:inherit;font:inherit;font-size:15px;cursor:pointer}
+.pt-mdet button.row span{color:var(--red);font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.pt-mdet button.row i{font-style:normal;color:var(--muted);font-size:18px}
+.pt-tip{margin:-4px 2px 0}
+.pt-back{align-self:flex-start;height:40px}
+.pt-mdays .pday{padding:6px 0;border-top:1px solid var(--line)}
+.pt-mdays .pday > b{font-size:14px}
+.pt-mdays .pday .row{border-top:0;padding:4px 0;font-size:14px}
+.pt-mdays .pday .row em{font-style:normal;font-family:var(--cond);font-weight:700;margin-right:6px}
+.pt-mdays .pday .row small{color:var(--muted)}

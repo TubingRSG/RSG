@@ -82,6 +82,40 @@
       return { pers: out(pers), ch: out(ch), total, days: new Set(docs.filter(d => this.hoursOf(d).length).map(d => d.date)).size };
     },
 
+    personStats(ym, nom) {
+      const ch = new Map(), days = []; let total = 0;
+      const docs = this.all().filter(d => String(d.date || "").startsWith(ym) && key(this.label(d)) === key(nom))
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      for (const d of docs) {
+        const bl = this.blocks(d); if (!bl.length) continue;
+        days.push({ date: d.date, blocks: bl });
+        for (const b of bl) {
+          const c = b.c || SANS, k = key(c);
+          if (!ch.has(k)) ch.set(k, { nom: c, h: 0, j: new Set() });
+          const x = ch.get(k); x.h += b.hours.length; x.j.add(d.date); total += b.hours.length;
+        }
+      }
+      return { ch: [...ch.values()].map(x => ({ nom: x.nom, h: x.h, j: x.j.size })), days, total, nbJours: days.length };
+    },
+    personSheet(ym, nom, extra = "") {
+      const p = this.personStats(ym, nom);
+      return `<div class="pt-sheet pt-msheet" ${extra}>
+        <div class="pt-title"><img src="${LOGO()}" alt="RSG"><div><b>RÉCAPITULATIF DES HEURES</b><span>${esc(nom)} · ${frMonth(ym)}</span></div></div>
+        <h2>1. Heures par chantier</h2>
+        <table class="pt-sum"><thead><tr><th>Chantier</th><th>Heures totales</th><th>Jours</th></tr></thead>
+          <tbody>${p.ch.length ? p.ch.map(x => `<tr><td>${esc(x.nom)}</td><td class="b">${H(x.h)}</td><td>${jours(x.j)}</td></tr>`).join("")
+            : `<tr><td colspan="3" class="empty">Aucune heure pointée ce mois-ci.</td></tr>`}</tbody></table>
+        <h2>2. Détail par jour</h2>
+        <table class="pt-sum pt-pday"><thead><tr><th>Date</th><th>Horaires</th><th>Chantier</th><th>Travail effectué</th><th>Heures</th></tr></thead>
+          <tbody>${p.days.length ? p.days.map(d => d.blocks.map((b, i) => `<tr class="${i ? "cont" : ""}">
+              <td>${i ? "" : esc(cap(new Date(d.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })))}</td>
+              <td>${pad(b.from)}h – ${pad(b.to)}h</td><td>${esc(b.c || SANS)}</td><td>${esc(b.t)}</td><td class="b">${b.hours.length} h</td></tr>`).join("")).join("")
+            : `<tr><td colspan="5" class="empty">—</td></tr>`}</tbody></table>
+        <h2>3. Total des heures du mois</h2>
+        <div class="pt-total"><span>Total des heures de ${esc(nom)}</span><b>${p.total} h · ${jours(p.nbJours)}</b></div>
+      </div>`;
+    },
+
     known() {
       const docs = this.all().sort((a, b) => String(b.date).localeCompare(String(a.date)));
       const pe = new Map(), ch = new Map(), trv = new Map(), allT = new Map();
@@ -166,7 +200,7 @@
       el.querySelector(".pt-seg").onclick = e => {
         const b = e.target.closest("[data-v]"); if (!b) return;
         this.view = b.dataset.v; if (this.view === "mois") this.month = this.date.slice(0, 7);
-        this.built = ""; this.renderPc();
+        this.person = null; this.built = ""; this.renderPc();
       };
       if (!this.pcBound) this.bindPc(el);
       this.renderPc();
@@ -180,6 +214,8 @@
         if (n) { if (this.view === "jour") this.date = addDays(this.date, +n.dataset.nav); else this.month = addMonths(this.month, +n.dataset.nav); return this.renderPc(); }
         const ml = e.target.closest("[data-mail]"); if (ml) return this.sendMail(ml.dataset.mail);
         if (e.target.closest("[data-today]")) { this.date = isoToday(); this.month = this.date.slice(0, 7); return this.renderPc(); }
+        const pr = e.target.closest("[data-person]"); if (pr) { this.person = pr.dataset.person; return this.renderPc(); }
+        if (e.target.closest("[data-person-back]")) { this.person = null; return this.renderPc(); }
         const dj = e.target.closest("[data-day]");
         if (dj) { this.date = dj.dataset.day; this.view = "jour"; return this.renderPc(); }
       });
@@ -285,15 +321,18 @@
         <tfoot><tr><td>Heures totales</td>${per.map((v, s) => `<td class="${s ? "" : "p0"}">${H(v)}</td>`).join("")}<td class="big">${H(total)}</td></tr></tfoot>`;
     },
 
-    monthSheet(ym, extra = "") {
+    monthSheet(ym, extra = "", click = false) {
       const m = this.monthStats(ym);
-      const table = (titre, col, list, vide) => `<h2>${titre}</h2>
+      const table = (titre, col, list, vide, pers) => `<h2>${titre}</h2>
         <table class="pt-sum"><thead><tr><th>${col}</th><th>Heures totales</th><th>Jours</th></tr></thead>
-        <tbody>${list.length ? list.map(x => `<tr><td>${esc(x.nom)}</td><td class="b">${H(x.h)}</td><td>${jours(x.j)}</td></tr>`).join("")
+        <tbody>${list.length ? list.map(x => pers && click
+          ? `<tr class="click" data-person="${esc(x.nom)}" title="Voir le détail de ${esc(x.nom)} par chantier"><td><span class="plink">${esc(x.nom)}</span><i class="go">Détail ›</i></td><td class="b">${H(x.h)}</td><td>${jours(x.j)}</td></tr>`
+          : `<tr><td>${esc(x.nom)}</td><td class="b">${H(x.h)}</td><td>${jours(x.j)}</td></tr>`).join("")
           : `<tr><td colspan="3" class="empty">${vide}</td></tr>`}</tbody></table>`;
       return `<div class="pt-sheet pt-msheet" ${extra}>
             <div class="pt-title"><img src="${LOGO()}" alt="RSG"><div><b>POINTAGE MENSUEL</b><span>${frMonth(ym)}</span></div></div>
-            ${table("1. Heures totales par personne", "Personne", m.pers, "Aucune heure pointée ce mois-ci.")}
+            ${table("1. Heures totales par personne", "Personne", m.pers, "Aucune heure pointée ce mois-ci.", true)}
+            ${click && m.pers.length ? `<p class="pt-note noprint">Cliquez sur le nom d'une personne pour voir ses heures sur chaque chantier.</p>` : ""}
             ${table("2. Heures totales réalisées par chantier", "Chantier", m.ch, "Aucun chantier ce mois-ci.")}
             <h2>3. Total des heures du mois</h2>
             <div class="pt-total"><span>Total des heures du mois</span><b>${m.total} h</b></div>
@@ -330,6 +369,12 @@
           what: "du pointage journalier",
           texts: { to: ME, subject: `Pointage journalier RSG – ${frLong(this.date)}`,
             body: `Bonjour,\n\nCi-joint le pointage journalier du ${frLong(this.date).toLowerCase()}.\n\nHeures par personne :\n${list(pers)}\n\nHeures par chantier :\n${list(ch)}\n\nTotal de la journée : ${total} h\n\nRSG – Réalisations Soudures Générales` } };
+      } else if (kind === "personne" && this.person) {
+        const nom = this.person, p = this.personStats(this.month, nom), slug = String(nom).replace(/[\\/:*?"<>|]+/g, "-");
+        o = { html: `<div class="pt pt-pdf">${this.personSheet(this.month, nom, 'style="width:794px"')}</div>`, title: `Heures de ${nom} ${this.month}`,
+          name: `Pointage ${slug} RSG - ${this.month}.pdf`, what: `du récapitulatif de ${nom}`,
+          texts: { to: ME, subject: `Pointage de ${nom} – ${frMonth(this.month)} – RSG`,
+            body: `Bonjour,\n\nCi-joint le récapitulatif des heures de ${nom} : ${frMonth(this.month).toLowerCase()}.\n\nHeures par chantier :\n${list(p.ch)}\n\nTotal : ${p.total} h sur ${p.nbJours} jour${p.nbJours > 1 ? "s" : ""}.\n\nRSG – Réalisations Soudures Générales` } };
       } else {
         const m = this.monthStats(this.month);
         o = { html: `<div class="pt pt-pdf">${this.monthSheet(this.month, 'style="width:794px"')}</div>`, title: `Pointage mensuel ${this.month}`, name: `Pointage mensuel RSG - ${this.month}.pdf`,
@@ -351,11 +396,12 @@
           <b class="pt-mlabel">${frMonth(this.month)}</b>
           <button class="btn" data-nav="1" aria-label="Mois suivant">›</button>
           <button class="btn" data-today ${cur ? "disabled" : ""}>Mois en cours</button>
-          <button class="btn primary" data-mail="mois">Envoyer par mail</button>
+          ${this.person ? `<button class="btn" data-person-back>‹ Retour au récapitulatif du mois</button>
+          <button class="btn primary" data-mail="personne">Envoyer par mail</button>` : `<button class="btn primary" data-mail="mois">Envoyer par mail</button>`}
           <span class="pt-hint">Calculé tout seul à partir des pointages journaliers : rien à remplir ici.</span>
         </div>
         <div class="pt-month">
-          ${this.monthSheet(this.month)}
+          ${this.person ? this.personSheet(this.month, this.person) : this.monthSheet(this.month, "", true)}
           <aside class="pt-days">
             <h3>Jours du mois</h3>
             <div>${perDay.map(([d, n]) => { const wd = new Date(d + "T12:00:00").getDay();
@@ -422,10 +468,30 @@
           <div class="row tot"><span>Heures totales du jour</span><b>${total} h</b></div></div>
           <button class="btn big" data-mail="jour">Envoyer le pointage du jour par mail</button>` : ""}`;
     },
+    personM() {
+      const nom = this.person, p = this.personStats(this.month, nom);
+      return `
+        <button class="btn pt-back" data-person-back>‹ Récapitulatif du mois</button>
+        <div class="pt-mdate">
+          <button data-mnav="-1" aria-label="Mois précédent">‹</button>
+          <label><b>${esc(nom)}</b><span>${frMonth(this.month)}</span></label>
+          <button data-mnav="1" aria-label="Mois suivant">›</button>
+        </div>
+        <div class="dv-card pt-mdet"><h3>Heures par chantier</h3>${p.ch.length
+          ? p.ch.map(x => `<div class="row"><span>${esc(x.nom)}</span><small>${jours(x.j)}</small><b>${x.h} h</b></div>`).join("")
+          : `<p class="small">Aucune heure pointée ce mois-ci.</p>`}
+          <div class="row tot"><span>Total de ${esc(nom)}</span><b>${p.total} h</b></div></div>
+        ${p.days.length ? `<div class="dv-card pt-mdet pt-mdays"><h3>Détail par jour</h3>${p.days.map(d => `<div class="pday">
+          <b>${esc(frShort(d.date))}</b>${d.blocks.map(b => `<div class="row"><span><em>${pad(b.from)}h – ${pad(b.to)}h</em> ${esc(b.c || SANS)}${b.t ? `<small> · ${esc(b.t)}</small>` : ""}</span><b>${b.hours.length} h</b></div>`).join("")}</div>`).join("")}</div>` : ""}
+        <button class="btn big" data-mail="personne">Envoyer le récapitulatif de ${esc(nom)} par mail</button>`;
+    },
     monthM() {
+      if (this.person) return this.personM();
       const m = this.monthStats(this.month);
-      const list = (titre, arr, vide) => `<div class="dv-card pt-mdet"><h3>${titre}</h3>${arr.length
-        ? arr.map(x => `<div class="row"><span>${esc(x.nom)}</span><small>${jours(x.j)}</small><b>${x.h} h</b></div>`).join("")
+      const list = (titre, arr, vide, pers) => `<div class="dv-card pt-mdet"><h3>${titre}</h3>${arr.length
+        ? arr.map(x => pers
+          ? `<button class="row click" data-person="${esc(x.nom)}"><span>${esc(x.nom)}</span><small>${jours(x.j)}</small><b>${x.h} h</b><i>›</i></button>`
+          : `<div class="row"><span>${esc(x.nom)}</span><small>${jours(x.j)}</small><b>${x.h} h</b></div>`).join("")
         : `<p class="small">${vide}</p>`}</div>`;
       return `
         <div class="pt-mdate">
@@ -433,7 +499,8 @@
           <label><b>${frMonth(this.month)}</b><span>Calculé tout seul</span></label>
           <button data-mnav="1" aria-label="Mois suivant">›</button>
         </div>
-        ${list("1. Heures totales par personne", m.pers, "Aucune heure pointée ce mois-ci.")}
+        ${list("1. Heures totales par personne", m.pers, "Aucune heure pointée ce mois-ci.", true)}
+        ${m.pers.length ? `<p class="small pt-tip">Touchez une personne pour voir ses heures sur chaque chantier.</p>` : ""}
         ${list("2. Heures totales réalisées par chantier", m.ch, "Aucun chantier ce mois-ci.")}
         <div class="dv-card pt-mdet"><h3>3. Total des heures du mois</h3><div class="row tot"><span>Total des heures du mois</span><b>${m.total} h</b></div></div>
         <button class="btn big" data-mail="mois">Envoyer le pointage du mois par mail</button>`;
@@ -442,8 +509,10 @@
       if (current !== this || this.mode !== "m") return;
       const t = e.target;
       if (this.wz) return this.clickWz(e);
+      const pr = t.closest("[data-person]"); if (pr) { this.person = pr.dataset.person; window.scrollTo(0, 0); return this.renderM(); }
+      if (t.closest("[data-person-back]")) { this.person = null; return this.renderM(); }
       const v = t.closest(".pt-mseg [data-v]");
-      if (v) { this.view = v.dataset.v; if (this.view === "mois") this.month = this.date.slice(0, 7); return this.renderM(); }
+      if (v) { this.person = null; this.view = v.dataset.v; if (this.view === "mois") this.month = this.date.slice(0, 7); return this.renderM(); }
       const n = t.closest("[data-mnav]");
       if (n) { if (this.view === "jour") this.date = addDays(this.date, +n.dataset.mnav); else this.month = addMonths(this.month, +n.dataset.mnav); return this.renderM(); }
       const ml = t.closest("[data-mail]"); if (ml) return this.sendMail(ml.dataset.mail);
