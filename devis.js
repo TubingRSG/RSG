@@ -147,6 +147,13 @@
     document.body.appendChild(holder);
     const el = holder.firstElementChild; el.style.boxShadow = "none";
     await Promise.all([...el.querySelectorAll("img")].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
+    // Page A4 trop haute (désignations longues) : on retire des lignes vides du tableau, en partant du bas,
+    // pour que tout tienne sur la page sans réduire la mise en page.
+    if (el.classList.contains("a4")) {
+      const vides = () => [...el.querySelectorAll("tbody tr")].filter(tr => !tr.textContent.trim() && !tr.querySelector("textarea,input"));
+      let v;
+      while (el.offsetHeight > 1123 && (v = vides()).length) v[v.length - 1].remove();
+    }
     try {
       const canvas = await window.html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
       const L = !!o.landscape, PW = L ? 297 : 210, PH = L ? 210 : 297;

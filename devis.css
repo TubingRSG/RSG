@@ -178,3 +178,6 @@ body:has(.dv-nav) .toast{bottom:calc(84px + env(safe-area-inset-bottom))}
 .dv-bar .st{min-width:64px;justify-content:flex-end;white-space:nowrap;flex:none}
 .dv-bar .st span{display:inline-block;min-width:40px;text-align:left;font-weight:600}
 .dv-bar .st i{width:10px;height:10px}
+
+/* les retours à la ligne des désignations sont gardés (tirets les uns sous les autres) */
+.a4 tbody td:first-child{white-space:pre-line}
