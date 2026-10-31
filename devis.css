@@ -174,3 +174,6 @@ body:has(.dv-nav) .toast{bottom:calc(84px + env(safe-area-inset-bottom))}
 .cl-row .btn{height:38px}
 .cl-row .btn.armed{background:var(--zero);color:#fff;padding:0 12px}
 .dv-side .top .btn:not(.primary){height:36px;font-size:13.5px}
+/* témoin d'enregistrement : largeur fixe, le texte qui change ne décale plus la barre ni la page */
+.dv-bar .st{min-width:150px;justify-content:flex-end;white-space:nowrap;flex:none}
+.dv-bar .st span{display:inline-block;min-width:118px;text-align:right}

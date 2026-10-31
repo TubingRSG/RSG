@@ -190,3 +190,4 @@
 .pt-scope button.on{background:var(--brand);color:#fff}
 .pt-total small{font-size:12px}
 .pt-mdate > span{width:46px;flex:none}
+.pt-st{min-width:150px;justify-content:flex-end;white-space:nowrap;flex:none}

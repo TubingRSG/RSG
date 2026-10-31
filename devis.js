@@ -393,7 +393,7 @@
     },
     queueSave() {
       if (!canEdit()) return;
-      this.dirty = true; this.status("Modifications en cours…", true);
+      this.dirty = true; this.status("Enregistrement…", true);
       clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), 700);
     },
     async flush() {
