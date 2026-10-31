@@ -181,3 +181,5 @@ body:has(.dv-nav) .toast{bottom:calc(84px + env(safe-area-inset-bottom))}
 
 /* les retours à la ligne des désignations sont gardés (tirets les uns sous les autres) */
 .a4 tbody td:first-child{white-space:pre-line}
+
+.a4 td .dl{display:block;min-height:1em}

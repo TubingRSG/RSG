@@ -1,7 +1,7 @@
 // RSG — garde l'application sur l'appareil pour qu'elle s'ouvre même sans Internet.
 // Les données, elles, viennent de la base (ou de la dernière copie gardée par l'application).
-const CACHE = "rsg-v12";
-const SHELL = ["./", "./index.html", "./logo.png", "./favicon.ico", "./icon-192.png", "./icon-512.png", "./manifest.json", "./devis.js?v=12", "./devis.css?v=12", "./logo-devis.png", "./pointage.js?v=12", "./pointage.css?v=12", "./factures.js?v=12", "./factures.css?v=12", "./avenants.js?v=12"];
+const CACHE = "rsg-v13";
+const SHELL = ["./", "./index.html", "./logo.png", "./favicon.ico", "./icon-192.png", "./icon-512.png", "./manifest.json", "./devis.js?v=13", "./devis.css?v=13", "./logo-devis.png", "./pointage.js?v=13", "./pointage.css?v=13", "./factures.js?v=13", "./factures.css?v=13", "./avenants.js?v=13"];
 const LIBS = [
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js",
   "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js",

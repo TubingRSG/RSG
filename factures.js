@@ -70,7 +70,7 @@
       const has = String(l.d).trim() || num(l.pu) || num(l.q);
       const tot = has && l.pu !== "" && l.q !== "" ? eur.format(num(l.pu) * num(l.q)) : "";
       body += `<tr data-row="${i}">
-        <td>${edit ? `<textarea class="f" data-f="lignes.${i}.d" rows="1">${esc(l.d)}</textarea>` : esc(l.d).replace(/\r?\n/g, "<br>")}</td>
+        <td>${edit ? `<textarea class="f" data-f="lignes.${i}.d" rows="1">${esc(l.d)}</textarea>` : String(l.d).split(/\r?\n/).map(x => `<div class="dl">${esc(x) || "&nbsp;"}</div>`).join("")}</td>
         <td class="n">${edit ? inp(`lignes.${i}.pu`, money(l.pu), { cls: "num-in money", im: "decimal" }) : (has && l.pu !== "" ? eur.format(num(l.pu)) : "")}</td>
         <td class="q">${edit ? inp(`lignes.${i}.q`, l.q, { cls: "c", im: "decimal" }) : (has ? esc(String(l.q).replace(".", ",")) : "")}</td>
         <td class="t" data-calc="l${i}">${tot}${edit && i < f.lignes.length ? `<button class="rowdel noprint" data-del="${i}" title="Supprimer la ligne" aria-label="Supprimer la ligne">×</button>` : ""}</td></tr>`;
