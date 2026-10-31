@@ -159,3 +159,18 @@ body:has(.dv-nav) .toast{bottom:calc(84px + env(safe-area-inset-bottom))}
 .dv-statut button.on.st-refuse{background:#c00000;border-color:#c00000}
 #dvMail .cc{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px;background:var(--surface-2);border-radius:10px;padding:8px 12px}
 #dvMail .cc span{color:var(--muted)}
+
+/* bouton retour bien visible en haut des écrans du téléphone */
+.dv-m .dv-back{align-self:flex-start;height:40px;padding:0 14px;font-size:15px;background:var(--surface)}
+
+/* fenêtre « Clients enregistrés » */
+#dvClientsDlg{width:min(520px,calc(100vw - 24px))}
+.cl-list{display:flex;flex-direction:column;gap:6px;max-height:min(60vh,520px);overflow:auto}
+.cl-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.cl-row .av{width:36px;height:36px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.cl-row div{min-width:0;display:flex;flex-direction:column}
+.cl-row b{font-size:15px;overflow-wrap:anywhere}
+.cl-row span{font-size:12.5px;color:var(--muted)}
+.cl-row .btn{height:38px}
+.cl-row .btn.armed{background:var(--zero);color:#fff;padding:0 12px}
+.dv-side .top .btn:not(.primary){height:36px;font-size:13.5px}

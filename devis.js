@@ -252,6 +252,36 @@
     return id;
   }
 
+  /* ---------- clients enregistrés : liste + suppression ---------- */
+  function openClients(after) {
+    let dlg = $("#dvClientsDlg");
+    if (!dlg) {
+      document.body.insertAdjacentHTML("beforeend", `<dialog id="dvClientsDlg"><div class="dlg"><h3>Clients enregistrés</h3>
+        <p class="small">Supprimer un client l'enlève seulement de la liste des propositions. Les devis et factures déjà faits pour lui ne changent pas.</p>
+        <div class="cl-list" id="clList"></div>
+        <div class="foot"><span class="spacer"></span><button class="btn primary" data-close>Fermer</button></div></div></dialog>`);
+      dlg = $("#dvClientsDlg");
+      dlg.querySelector("[data-close]").onclick = () => dlg.close();
+      dlg.addEventListener("close", () => after && after());
+      $("#clList").onclick = async e => {
+        const b = e.target.closest("[data-cldel]"); if (!b) return;
+        if (!canEdit()) return;
+        if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = "Confirmer"; setTimeout(() => { b.classList.remove("armed"); b.textContent = "Supprimer"; }, 4000); return; }
+        const c = store.get("clients", b.dataset.cldel);
+        try { await store.remove("clients", b.dataset.cldel); toast(`Client « ${c?.nom || ""} » supprimé`); draw(); } catch (err) { toast(frError(err)); }
+      };
+    }
+    const draw = () => {
+      const list = store.list("clients").sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+      const nb = id => store.list("devis").filter(d => d.clientId === id).length;
+      $("#clList").innerHTML = list.length ? list.map(c => `<div class="cl-row"><span class="av">${esc(initials(c.nom))}</span>
+          <div><b>${esc(c.nom)}</b><span>${esc([c.adr1, c.adr2].filter(Boolean).join(", ") || "Adresse non renseignée")}${nb(c.id) ? ` · ${nb(c.id)} devis` : ""}</span></div>
+          <button class="btn danger" data-cldel="${c.id}">Supprimer</button></div>`).join("")
+        : `<p class="small">Aucun client enregistré.</p>`;
+    };
+    draw(); dlg.showModal();
+  }
+
   /* =================================================================
      L'onglet
      ================================================================= */
@@ -289,6 +319,7 @@
       if (!this.el || current !== this) return;
       if (this.mode === "pc") {
         this.renderList();
+        if (this.av) { window.avenantsView.refreshPC(); return; }
         if (!this.selId && !this.draft && !this.dirty) {          // premier chargement : on ouvre le devis le plus récent
           const first = this.sortedList()[0];
           if (first) { this.selId = first.id; this.draft = normalize(first); this.renderList(); this.renderPage(); return; }
@@ -307,6 +338,7 @@
       this.el.innerHTML = `<div class="dv"><div class="dv-pc">
         <aside class="dv-side"><div class="top">
           <button class="btn primary" data-act="new">+ Nouveau devis</button>
+          <button class="btn" data-act="clients">Clients enregistrés</button>
           <input id="dvSearch" placeholder="Rechercher (client, n°, chantier)" value="${esc(this.q)}" aria-label="Rechercher un devis">
         </div><div class="dv-list" id="dvList"></div></aside>
         <section class="dv-main" id="dvMain"></section>
@@ -327,7 +359,8 @@
         const t = calc(normalize(d));
         return `<button class="dv-item ${d.id === this.selId ? "on" : ""}" data-open="${d.id}">
           <b>${esc(d.numero)}</b><em>${eur.format(t.ttc)}</em>
-          <span>${esc(d.client?.nom || "Client à renseigner")}${d.client?.ref ? " · " + esc(d.client.ref) : ""}</span><span class="statut ${d.statut || "brouillon"}">${STATUTS[d.statut] || "Brouillon"}</span></button>`;
+          <span>${esc(d.client?.nom || "Client à renseigner")}${d.client?.ref ? " · " + esc(d.client.ref) : ""}</span><span class="statut ${d.statut || "brouillon"}">${STATUTS[d.statut] || "Brouillon"}</span>
+          ${window.avenantsView?.count(d.id) ? `<span class="dv-avn">+ ${window.avenantsView.count(d.id)} avenant${window.avenantsView.count(d.id) > 1 ? "s" : ""}</span>` : ""}</button>`;
       }).join("") : `<div class="dv-empty">${store.list("devis").length ? "Aucun devis ne correspond." : "Aucun devis pour l'instant. Cliquez « + Nouveau devis » pour commencer."}</div>`;
       const dl = $("#dvClients"); if (dl) dl.innerHTML = store.list("clients").map(c => `<option value="${esc(c.nom)}">${esc([c.adr2].filter(Boolean).join(" "))}</option>`).join("");
     },
@@ -337,8 +370,11 @@
         main.innerHTML = `<div class="dv-card"><b>Aucun devis ouvert.</b><p class="dv-hint">Créez un devis avec « + Nouveau devis », ou choisissez-en un dans la liste.</p></div>`;
         return;
       }
-      const d = this.draft;
-      main.innerHTML = `<div class="dv-bar">
+      const d = this.draft, AV = window.avenantsView;
+      const strip = this.selId && AV ? AV.tabsHtml(this.selId, d.numero, this.av) : "";
+      if (this.av && AV && AV.id === this.av) { main.innerHTML = strip + `<div id="avHost"></div>`; AV.renderPC($("#avHost")); return; }
+      this.av = null;
+      main.innerHTML = strip + `<div class="dv-bar">
           <button class="btn primary" data-act="pdf">Enregistrer en PDF sur le PC</button>
           <button class="btn" data-act="mail">Envoyer par mail</button>
           <button class="btn" data-act="facturer" title="Transformer ce devis en facture">Facturer</button>
@@ -397,6 +433,7 @@
     onInput(e) {
       if (e.target.id === "dvSearch") { this.q = e.target.value; this.renderList(); return; }
       if (this.mode === "m") return this.onInputM(e);
+      if (this.av && e.target.closest("#avPane")) return window.avenantsView.onInputPC(e);
       const f = e.target.dataset.f; if (!f || !this.draft) return;
       let v = e.target.value;
       if (f === "tva") v = +v;
@@ -417,6 +454,7 @@
     },
     onChange(e) {
       if (this.mode === "m") return this.onChangeM(e);
+      if (this.av && e.target.closest("#avPane")) return window.avenantsView.onChangePC(e);
       const t = e.target;
       if (t.dataset.f === "client.nom") { this.fillFromClient(t.value); this.queueSave(); }
       if (t.dataset.f === "tva") { this.draft.tva = +t.value; this.renderPage(); this.queueSave(); if (this.draft.tva === 0) toast("Mention ajoutée : " + AUTOLIQ); }
@@ -433,16 +471,27 @@
     },
     async onClick(e) {
       if (this.mode === "m") return this.onClickM(e);
+      const AV = window.avenantsView;
+      const ds = e.target.closest("[data-dsub]");
+      if (ds) { await this.flush(); await AV.flush(); this.av = ds.dataset.dsub || null; if (this.av && !AV.load(this.av)) this.av = null; this.renderPage(); return; }
+      if (e.target.closest('[data-act="newav"]')) {
+        if (!canEdit() || !this.selId) return;
+        await this.flush(); await AV.flush();
+        try { const n = await AV.create(this.selId); this.av = n.id; this.renderPage(); this.renderList(); refocus(this.el, "lignes.0.d"); } catch (err) { toast(frError(err)); }
+        return;
+      }
+      if (this.av && e.target.closest("#avPane")) { const r = await AV.onClickPC(e); if (r === "deleted") { this.av = null; this.renderPage(); this.renderList(); } return; }
       const o = e.target.closest("[data-open]");
-      if (o) { await this.flush(); this.selId = o.dataset.open; this.draft = normalize(store.get("devis", this.selId)); this.renderList(); this.renderPage(); return; }
+      if (o) { await this.flush(); await AV.flush(); this.av = null; this.selId = o.dataset.open; this.draft = normalize(store.get("devis", this.selId)); this.renderList(); this.renderPage(); return; }
       const del = e.target.closest("[data-del]");
       if (del) { this.draft.lignes.splice(+del.dataset.del, 1); this.renderPage(); this.updateCalc(); this.queueSave(); return; }
       const a = e.target.closest("[data-act]")?.dataset.act; if (!a || e.target.tagName === "SELECT") return;
       if (a === "new") {
         if (!canEdit()) return;
-        await this.flush(); this.selId = null; this.draft = normalize(blank()); this.renderList(); this.renderPage();
+        await this.flush(); this.av = null; this.selId = null; this.draft = normalize(blank()); this.renderList(); this.renderPage();
         this.el.querySelector('[data-f="client.nom"]')?.focus(); this.dirty = true; this.flush();
       }
+      if (a === "clients") return openClients(() => this.renderList());
       if (a === "addline") { this.draft.lignes = cleanLines(this.draft).lignes; this.draft.lignes.push({ d: "", pu: "", q: 1 }); this.renderPage(); refocus(this.el, `lignes.${this.draft.lignes.length - 1}.d`); }
       if (a === "pdf") { await this.flush(); try { const r = await savePDF(cleanLines(this.draft)); if (r === "saved") toast("PDF enregistré dans Téléchargements : " + fileName(this.draft)); } catch (err) { if (err?.code !== "declined") toast(err.message || String(err)); } }
       if (a === "mail") { await this.flush(); openMail(cleanLines(this.draft), () => { if (this.draft.statut === "brouillon") { this.draft.statut = "envoye"; this.queueSave(); this.renderPage(); } }); }
@@ -466,11 +515,16 @@
     /* -------------------------- téléphone -------------------------- */
     renderM() {
       const m = this.m;
+      if (m.screen === "av") {
+        if (window.avenantsView.renderM(this.el, m.draft)) return;
+        m.screen = "step"; m.step = 5;
+      }
       if (m.screen === "list") {
         const items = this.sortedList();
         this.el.innerHTML = `<div class="dv dv-m">
           <h1>Création de devis</h1>
           <button class="btn primary big" data-act="mnew">+ Nouveau devis</button>
+          <button class="btn big" data-act="mclients">Clients enregistrés</button>
           ${items.length ? `<div class="dv-sub" style="margin:4px 0 0">Devis récents</div>` + items.map(d => { const t = calc(normalize(d));
             return `<button class="dv-mitem" data-mopen="${d.id}"><b>${esc(d.client?.nom || "Client à renseigner")}</b><em>${eur.format(t.ttc)}</em>
               <span>${esc(d.numero)}${d.client?.ref ? " · " + esc(d.client.ref) : ""}</span><span class="statut ${d.statut || "brouillon"}">${STATUTS[d.statut] || "Brouillon"}</span></button>`; }).join("")
@@ -494,7 +548,8 @@
           : `<div class="field"><input id="mcq" data-mq value="${esc(m.cq)}" placeholder="Rechercher un client…" aria-label="Rechercher un client"></div>
             <div class="dv-pick">${clients.map(c => `<button data-client="${c.id}" class="${d.clientId === c.id ? "on" : ""}"><span class="av">${esc(initials(c.nom))}</span><div><b>${esc(c.nom)}</b><span>${esc([c.adr1, c.adr2].filter(Boolean).join(", ") || "Adresse à compléter")}</span></div></button>`).join("")
               || `<div class="dv-sub" style="margin:0">Aucun client trouvé.</div>`}</div>
-            <button class="btn big" data-act="mnewclient">+ Nouveau client</button>`}`;
+            <button class="btn big" data-act="mnewclient">+ Nouveau client</button>
+            <button class="btn" data-act="mclients">Gérer les clients enregistrés</button>`}`;
       } else if (st === 2) {
         h = `<p class="dv-q">Quel est le chantier ?</p><p class="dv-sub">Pour ${esc(d.client.nom || "le client")}.</p>
           <div class="field"><label for="mDate">Date du devis</label><input id="mDate" type="date" data-m="date" value="${esc(d.date)}"></div>
@@ -518,7 +573,7 @@
           <div><div class="field"><label>Acomptes (signature / début / 3/4 / solde)</label></div><div class="dv-chips">${PRESETS.map(([n, v], i) => `<button data-preset="${i}" class="${String(v) === String(d.acomptes.map(num)) ? "on" : ""}">${n}</button>`).join("")}</div></div>
           <div class="dv-card dv-sum">${ACOMPTES.map((lab, i) => `<div><span>${lab.replace(" :", "")} (${num(d.acomptes[i])} %)</span><b>${eur.format(t.ttc * num(d.acomptes[i]) / 100)}</b></div>`).join("")}</div>`;
       } else {
-        h = `<p class="dv-q">Votre devis est prêt</p><p class="dv-sub">${esc(d.numero)} · ${esc(d.client.nom || "")}</p>
+        h = `${m.id && window.avenantsView ? window.avenantsView.tabsHtml(m.id, d.numero, null) : ""}<p class="dv-q">Votre devis est prêt</p><p class="dv-sub">${esc(d.numero)} · ${esc(d.client.nom || "")}</p>
           <div class="dv-prev" id="mPrev">${page(d, false)}</div>
           <div class="dv-card dv-sum"><div><span>Total HT</span><b>${eur.format(t.ht)}</b></div><div><span>TVA ${pctTxt(d.tva)}</span><b>${eur.format(t.tv)}</b></div><div class="ttc"><span>Total TTC</span><b>${eur.format(t.ttc)}</b></div></div>
           <div class="dv-card"><div class="field"><label>Statut du devis</label></div>
@@ -529,7 +584,7 @@
           <div class="dv-edit"><span class="dv-sub" style="margin:0;align-self:center">Modifier :</span>${["Client", "Chantier", "Prestations", "Conditions"].map((n, i) => `<button data-goto="${i + 1}">${n}</button>`).join("")}</div>
           <button class="btn danger" data-act="mdelete">Supprimer ce devis</button>`;
       }
-      this.el.innerHTML = `<div class="dv dv-m">${steps}${h}</div>
+      this.el.innerHTML = `<div class="dv dv-m"><button class="btn dv-back" data-act="mtolist">‹ Liste des devis</button>${steps}${h}</div>
         <div class="dv-nav"><button class="btn" data-act="mback">${st === 1 || st === 5 ? "Liste" : "Retour"}</button>
           <div class="tt">Total TTC<b id="mTot">${eur.format(t.ttc)}</b></div>
           ${st < 5 ? `<button class="btn primary" data-act="mnext">${st === 4 ? "Voir le devis" : "Suivant"}</button>` : ""}</div>`;
@@ -543,6 +598,7 @@
     },
     onInputM(e) {
       const t = e.target, m = this.m;
+      if (m.screen === "av") return window.avenantsView.onInputM(e);
       if (t.dataset.mq !== undefined) { m.cq = t.value; const pos = caretOf(t); this.renderM(); const i = $("#mcq"); i && (i.focus(), i.setSelectionRange(pos, pos)); return; }
       const f = t.dataset.m; if (!f) return;
       let v = t.value; if (/\.(pu|q)$/.test(f)) v = v.replace(",", ".");
@@ -558,7 +614,28 @@
       if (e.target.dataset.act === "mliv") { this.m.liv = e.target.checked; if (!e.target.checked) { this.m.draft.client.liv1 = this.m.draft.client.liv2 = ""; } this.renderM(); }
     },
     async onClickM(e) {
-      const m = this.m, g = s => e.target.closest(s);
+      const m = this.m, g = s => e.target.closest(s), AV = window.avenantsView;
+      if (g("[data-dsub]")) {
+        if (m.screen === "av" && AV.m.screen === "edit") await AV.saveDraftM();
+        const v = g("[data-dsub]").dataset.dsub;
+        if (v && AV.load(v)) m.screen = "av"; else { m.screen = "step"; m.step = 5; }
+        window.scrollTo(0, 0); return this.renderM();
+      }
+      if (g('[data-act="newav"]')) {
+        if (!canEdit()) return;
+        if (m.screen === "av" && AV.m.screen === "edit") await AV.saveDraftM();
+        if (m.screen !== "av" && !(await this.saveM())) return;
+        try { await AV.create(m.id); m.screen = "av"; window.scrollTo(0, 0); this.renderM(); } catch (err) { toast(frError(err)); }
+        return;
+      }
+      if (m.screen === "av") {
+        if (g('[data-act="avback"]')) { if (AV.m.screen === "edit") await AV.saveDraftM(); m.screen = "step"; m.step = 5; window.scrollTo(0, 0); return this.renderM(); }
+        const r = await AV.onClickM(e);
+        if (r === "deleted") { m.screen = "step"; m.step = 5; return this.renderM(); }
+        if (r === "rerender") return this.renderM();
+        if (r === "rerender-focus") { this.renderM(); const t = this.el.querySelectorAll(".dv-line textarea"); const last = t[t.length - 1]; last && (last.scrollIntoView({ block: "center" }), last.focus()); }
+        return;
+      }
       if (g("[data-mopen]")) { m.id = g("[data-mopen]").dataset.mopen; m.draft = normalize(store.get("devis", m.id)); m.screen = "step"; m.step = 5; return this.renderM(); }
       if (g("[data-client]")) {
         const c = store.get("clients", g("[data-client]").dataset.client);
@@ -579,9 +656,11 @@
       if (g("[data-goto]")) { m.step = +g("[data-goto]").dataset.goto; return this.renderM(); }
       const a = g("[data-act]")?.dataset.act; if (!a) return;
       if (a === "mnew") { if (!canEdit()) return; m.draft = normalize(blank()); m.id = null; m.screen = "step"; m.step = 1; m.newClient = false; m.cq = ""; m.liv = false; return this.renderM(); }
+      if (a === "mclients") return openClients(() => this.renderM());
       if (a === "mnewclient") { m.newClient = true; m.draft.clientId = null; m.draft.client = Object.assign(m.draft.client, { nom: "", adr1: "", adr2: "", email: "" }); this.renderM(); $("#mcNom")?.focus(); return; }
       if (a === "mclist") { m.newClient = false; return this.renderM(); }
       if (a === "maddline") { m.draft.lignes.push({ d: "", pu: "", q: 1 }); this.renderM(); const k = m.draft.lignes.length - 1, t = $("#ml" + k); t && (t.scrollIntoView({ block: "center" }), t.focus()); return; }
+      if (a === "mtolist") { if (m.draft && (m.id || m.draft.client.nom)) await this.saveM(); m.screen = "list"; window.scrollTo(0, 0); return this.renderM(); }
       if (a === "mback") {
         if (m.step === 1 || m.step === 5) { if (m.draft && (m.id || m.draft.client.nom)) await this.saveM(); m.screen = "list"; return this.renderM(); }
         m.step--; return this.renderM();

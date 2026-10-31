@@ -41,7 +41,21 @@
   const fileName = f => ["Facture RSG", f.client?.nom, f.client?.ref, String(f.numero || "").replace(/\//g, "-")].map(cleanName).filter(Boolean).join(" - ") + ".pdf";
   const facturesOf = devisId => store.list(COL).filter(f => f.devisId === devisId);
   const acomptesTTC = (devisId, exceptId) => round2(facturesOf(devisId).filter(f => f.type === "acompte" && f.id !== exceptId).reduce((s, f) => s + K().calc(normalize(f)).ttc, 0));
-  const typeTxt = f => f.type === "acompte" ? `Acompte ${pctFr(f.pct)}` : "Facture totale";
+  const isAvAc = f => f.type === "avenant" && f.avPart === "acompte";
+  const acTxt = f => f.avancement ? `Avancement ${pctFr(f.avancement)}` : `Acompte ${pctFr(f.pct)}`;
+  const typeTxt = f => f.type === "acompte" ? acTxt(f) : isAvAc(f) ? `${acTxt(f)} avenant n° ${f.avenantRang || ""}` : f.type === "avenant" ? `Avenant n° ${f.avenantRang || ""}` : "Facture totale";
+  const AV = () => window.avenantsView, AK = () => window.avenantsKit;
+  // Toutes les factures d'un même devis sont rangées ensemble (acomptes, facture totale, factures d'avenant) :
+  // la liste n'en montre qu'une ligne, et la facture ouverte affiche les autres en sous-onglets.
+  const ordre = f => f.type === "acompte" ? 0 : f.type === "totale" ? 1 : 2 + (f.avenantRang || 0) * 2 + (isAvAc(f) ? 0 : 1);
+  const familyOf = f => !f?.devisId ? [f] : store.list(COL).filter(x => x.devisId === f.devisId)
+    .sort((a, b) => ordre(a) - ordre(b) || (a.avenantRang || 0) - (b.avenantRang || 0) || (a.date || "").localeCompare(b.date || "") || String(a.numero).localeCompare(String(b.numero), "fr", { numeric: true }));
+  const topOf = f => familyOf(f)[0];
+  const tabLabel = x => isAvAc(x) ? `${acTxt(x)} avenant n° ${x.avenantRang}` : x.type === "avenant" ? `Facture d'avenant n° ${x.avenantRang}` : x.type === "acompte" ? (x.avancement ? `Acompte à l'avancement ${pctFr(x.avancement)}` : `Facture d'acompte ${pctFr(x.pct)}`) : "Facture totale";
+  function familyTabs(f, attr) {
+    const fam = familyOf(f); if (fam.length < 2) return "";
+    return `<div class="dv-subtabs"><span class="dv-subtl">Devis ${esc(f.devisNumero)} :</span>${fam.map(x => `<button ${attr}="${x.id}" class="${x.id === f.id ? "on" : ""}"><b>${tabLabel(x)}</b><small>${esc(x.numero)}</small></button>`).join("")}</div>`;
+  }
 
   /* ---------- la page A4 de la facture ---------- */
   function page(f, edit) {
@@ -64,10 +78,13 @@
     const tvaSel = edit
       ? `<select class="f" data-f="tva" aria-label="Taux de TVA">${k.TVAS.map(v => `<option value="${v}" ${v === f.tva ? "selected" : ""}>${pctTxt(v)}</option>`).join("")}</select>`
       : pctTxt(f.tva);
+    const duDevis = `devis n° ${esc(f.devisNumero)}${f.devisDate ? ` du ${frDate(f.devisDate)}` : ""}`;
+    const inclus = (f.avenantsInclus || []).map(x => x.rang);
     const origin = f.devisNumero
-      ? (f.type === "acompte"
-        ? `Facture d'acompte de ${pctFr(f.pct)} sur le devis n° ${esc(f.devisNumero)}${f.devisDate ? ` du ${frDate(f.devisDate)}` : ""}`
-        : `Facture établie d'après le devis n° ${esc(f.devisNumero)}${f.devisDate ? ` du ${frDate(f.devisDate)}` : ""}`)
+      ? (f.type === "acompte" ? (f.avancement ? `Facture d'acompte à l'avancement (travaux réalisés à ${pctFr(f.avancement)}) sur le ${duDevis}` : `Facture d'acompte de ${pctFr(f.pct)} sur le ${duDevis}`)
+        : isAvAc(f) ? `Facture d'acompte ${f.avancement ? `à l'avancement (travaux réalisés à ${pctFr(f.avancement)})` : `de ${pctFr(f.pct)}`} sur l'avenant n° ${f.avenantRang} (${esc(f.avenantNumero)}) au ${duDevis}`
+        : f.type === "avenant" ? `Facture de l'avenant n° ${f.avenantRang} (${esc(f.avenantNumero)}) au ${duDevis}`
+        : `Facture établie d'après le ${duDevis}${inclus.length ? ` et ${inclus.length > 1 ? "ses avenants n° " + inclus.join(", ") : "son avenant n° " + inclus[0]}` : ""}`)
       : "";
     return `<div class="a4 ft-a4 ${edit ? "" : "static"}">
       <div class="hd">
@@ -92,7 +109,8 @@
         <thead><tr><th>Désignation des produits et prestations</th><th>Prix unitaire HT</th><th>Quantité</th><th>Total HT</th></tr></thead>
         <tbody>${body}</tbody></table>
       ${edit ? `<div class="addrow noprint"><button data-act="addline">+ Ajouter une ligne</button></div>` : ""}
-      ${f.type === "acompte" && f.devisTTC ? `<div class="ft-recap">Montant total du devis : <b>${eur.format(f.devisHT)} HT</b> soit <b>${eur.format(f.devisTTC)} TTC</b> · acompte demandé : <b>${pctFr(f.pct)}</b></div>` : ""}
+      ${isAvAc(f) && f.avTTC != null ? `<div class="ft-recap">Montant total de l'avenant : <b>${eur.format(f.avHT)} HT</b> soit <b>${eur.format(f.avTTC)} TTC</b> · ${f.avancement ? `avancement : <b>${pctFr(f.avancement)}</b>` : `acompte demandé : <b>${pctFr(f.pct)}</b>`}</div>` : ""}
+      ${f.type === "acompte" && f.devisTTC ? `<div class="ft-recap">Montant total du devis : <b>${eur.format(f.devisHT)} HT</b> soit <b>${eur.format(f.devisTTC)} TTC</b> · ${f.avancement ? `avancement : <b>${pctFr(f.avancement)}</b>` : `acompte demandé : <b>${pctFr(f.pct)}</b>`}</div>` : ""}
       <div class="tot">
         <div><span>Total Hors Taxe (HT)</span><b data-calc="ht">${eur.format(t.ht)}</b></div>
         <div><span>Total TVA (${tvaSel})</span><b data-calc="tv">${eur.format(t.tv)}</b></div>
@@ -117,8 +135,35 @@
   }
   const pdfOpts = f => ({ html: page(f, false), title: `Facture ${f.numero}`, name: fileName(f), texts: mailTexts(f), label: "facture" });
 
+  /* ---------- acompte : pourcentage fixe ou « à l'avancement » ---------- */
+  // st.mode = "pct" (pourcentage du montant) ou "avct" (travaux réalisés à X %, moins les acomptes déjà facturés)
+  function acompteAmount(st, t, dejaHT) {
+    const ht = st.mode === "avct" ? round2(t.ht * st.avct / 100 - dejaHT) : round2(t.ht * st.pct / 100);
+    return { ht, ttc: round2(ht * (t.ht ? t.ttc / t.ht : 1)), pct: t.ht ? round2(ht / t.ht * 100) : 0 };
+  }
+  function acompteBlock(st, ac, t, dejaHT) {
+    const k = K(), m = acompteAmount(st, t, dejaHT), avct = st.mode === "avct";
+    return `<div class="ft-pct">
+      <div class="dv-chips">${ac.map(([lab, p], i) => `<button data-fpct="${i}" class="${!avct && st.idx === i ? "on" : ""}">${esc(lab)} · ${p} %</button>`).join("")}
+        <button data-favct class="${avct ? "on" : ""}">Acompte à l'avancement</button></div>
+      <div class="ft-pctrow"><label for="ftPctIn">${avct ? "Avancement des travaux" : "Pourcentage"}</label><input id="ftPctIn" inputmode="decimal" value="${String(avct ? st.avct : st.pct).replace(".", ",")}"><span>%</span></div>
+      <div class="ft-amt" id="ftAmtBox">${acompteTxt(st, t, dejaHT)}</div></div>`;
+  }
+  function acompteTxt(st, t, dejaHT) {
+    const k = K(), m = acompteAmount(st, t, dejaHT);
+    if (st.mode !== "avct") return `Montant de l'acompte : <b>${k.eur.format(m.ht)} HT · ${k.eur.format(m.ttc)} TTC</b>`;
+    const fait = round2(t.ht * st.avct / 100);
+    return `Travaux réalisés à ${pctFr(st.avct)} : ${k.eur.format(fait)} HT${dejaHT ? ` − acomptes déjà facturés ${k.eur.format(dejaHT)} HT` : ""}<br>
+      ${m.ht > 0 ? `À facturer : <b>${k.eur.format(m.ht)} HT · ${k.eur.format(m.ttc)} TTC</b>` : `<b class="pt-warn">Rien à facturer : les acomptes déjà facturés couvrent cet avancement.</b>`}`;
+  }
+  function acompteLine(st, label, sur, ref, m) {
+    return st.mode === "avct"
+      ? `Acompte à l'avancement (travaux réalisés à ${pctFr(st.avct)}) sur ${sur}${ref ? ` – ${ref}` : ""}`
+      : `${label ? label + " (" + pctFr(st.pct) + ")" : "Acompte de " + pctFr(st.pct)} sur ${sur}${ref ? ` – ${ref}` : ""}`;
+  }
+
   /* ---------- création à partir d'un devis ---------- */
-  function fromDevis(dv, type, pct, label) {
+  function fromDevis(dv, type, pct, label, avs = []) {
     const k = K(), d = k.cleanLines(k.normalize(dv)), t = k.calc(d), date = k.isoToday(), ref = d.client.ref;
     const f = {
       numero: nextNumero(date), date, echeance: addDays(date, 30), type, pct: type === "acompte" ? pct : 100,
@@ -130,6 +175,11 @@
       f.lignes = [{ d: `${label ? label + " (" + pctFr(pct) + ")" : "Acompte de " + pctFr(pct)} sur le devis n° ${d.numero} du ${k.frDate(d.date)}${ref ? ` – ${ref}` : ""}`, pu: round2(t.ht * pct / 100), q: 1 }];
     } else {
       f.lignes = d.lignes.map(l => ({ ...l }));
+      for (const a of avs) {
+        const n = k.cleanLines(AK().normalize(a));
+        n.lignes.forEach(l => f.lignes.push({ d: `Avenant n° ${n.rang} – ${l.d}`, pu: l.pu, q: l.q }));   // (plus proposé : les avenants se facturent à part)
+      }
+      if (avs.length) f.avenantsInclus = avs.map(a => ({ id: a.id, rang: a.rang, numero: a.numero }));
       f.deduit = acomptesTTC(dv.id);
     }
     return f;
@@ -141,29 +191,116 @@
   const tab = {
     id: "factures",
     title: "Création de facture",
-    collections: ["factures", "devis", "clients"],
-    el: null, mode: null,
+    collections: ["factures", "avenants", "devis", "clients"],
+    el: null, mode: null, sub: "factures",
     selId: null, draft: null, dirty: false, saving: false, timer: null, q: "",
     m: { screen: "list", id: null },
 
     // Sauvegarde PDF (Réglages) : un PDF par facture de la période
     exportPdf(p) {
       return this.sorted().filter(f => !p || (String(f.date || "") >= p.from && String(f.date || "") <= p.to)).map(f => { const n = K().cleanLines(normalize(f));
-        return { path: "Factures/" + fileName(n), make: () => K().makePDF(n, pdfOpts(n)) }; });
+        return { path: "Factures/" + fileName(n), make: () => K().makePDF(n, pdfOpts(n)) }; }).concat(AV() ? AV().exportPdf(p) : []);
     },
+    // avenants : facture liée, ouverture d'une facture, facturation d'un avenant
+    avenantFacture(avId) { return this.avenantFactures(avId)[0]; },
+    avenantFactures(avId) { return store.list(COL).filter(f => f.avenantId === avId).sort((a, b) => ordre(a) - ordre(b) || (a.date || "").localeCompare(b.date || "")); },
+    showFacture(id) {
+      this.pickMode = false; this.selId = id; this.draft = normalize(store.get(COL, id)); this.m = { screen: "view", id };
+      if (current === this) this.mount(this.el); else showTab("factures");
+      window.scrollTo(0, 0);
+    },
+    // part = "totale" (facture identique à l'avenant, acomptes déjà facturés déduits) ou "acompte" (pct %)
+    async createFromAvenant(a, part = "totale", pct = 100, label = "", st = null) {
+      if (!canEdit()) return;
+      const k = K(), date = k.isoToday(), t = k.calc(a);
+      const f = { numero: nextNumero(date), date, echeance: addDays(date, 30), type: "avenant", avPart: part, pct: part === "acompte" ? pct : 100,
+        avenantId: a.id, avenantNumero: a.numero, avenantRang: a.rang, avHT: round2(t.ht), avTTC: round2(t.ttc),
+        devisId: a.devisId, devisNumero: a.devisNumero, devisDate: a.devisDate, statut: "a_envoyer", clientId: a.clientId || null,
+        client: { ...a.client }, tva: a.tva, devisHT: a.devisHT, devisTTC: a.devisTTC, deduit: 0 };
+      if (part === "acompte") {
+        const dejaHT = round2(this.avenantFactures(a.id).filter(isAvAc).reduce((s, x) => s + K().calc(normalize(x)).ht, 0));
+        const S = st || { mode: "pct", pct }, m = acompteAmount(S, t, dejaHT);
+        if (S.mode === "avct") { f.avancement = S.avct; f.pct = m.pct; }
+        f.lignes = [{ d: acompteLine(S, label, `l'avenant n° ${a.rang} (${a.numero}) au devis n° ${a.devisNumero}`, a.client.ref, m), pu: m.ht, q: 1 }];
+      } else {
+        f.lignes = a.lignes.map(({ d, pu, q }) => ({ d, pu, q }));
+        f.deduit = round2(this.avenantFactures(a.id).filter(isAvAc).reduce((s, x) => s + K().calc(normalize(x)).ttc, 0));
+      }
+      try {
+        const n = await store.create(COL, f);
+        if (a.statut !== "accepte") await store.patch("avenants", a.id, { statut: "accepte" }).catch(() => {});
+        toast(`Facture ${f.numero} créée${part === "acompte" ? ` (acompte ${pctFr(pct)})` : ""} pour l'avenant n° ${a.rang}`);
+        this.showFacture(n.id);
+      } catch (e) { toast(frError(e)); }
+    },
+    // fenêtre « Transformer l'avenant en facture » : identique ou acompte
+    openCreateAvenant(avId) {
+      const k = K(), a0 = store.get("avenants", avId); if (!a0) return toast("Avenant introuvable.");
+      if (!canEdit()) return;
+      const a = k.cleanLines(AK().normalize(a0)), t = k.calc(a), dv = store.get("devis", a.devisId);
+      if (!a.lignes.length) return toast("L'avenant n'a encore aucune ligne.");
+      const deja = this.avenantFactures(avId), acTTC = round2(deja.filter(isAvAc).reduce((s, f) => s + k.calc(normalize(f)).ttc, 0));
+      const dejaTTC = round2(deja.reduce((s, f) => s + totals(normalize(f)).net, 0)), reste = round2(t.ttc - dejaTTC);
+      const ac = dv ? k.ACOMPTES.map((lab, i) => [lab.replace(/\s*:$/, ""), k.num(k.normalize(dv).acomptes[i])]).filter(([, p]) => p > 0) : [];
+      let dlg = $("#ftNew");
+      if (!dlg) { document.body.insertAdjacentHTML("beforeend", `<dialog id="ftNew"><div class="dlg" id="ftNewBody"></div></dialog>`); dlg = $("#ftNew"); }
+      const avHT = round2(deja.filter(isAvAc).reduce((s, f) => s + k.calc(normalize(f)).ht, 0));
+      const st = { type: "totale", pct: ac[0]?.[1] || 30, idx: ac.length ? 0 : -1, mode: "pct", avct: 50 };
+      const draw = () => {
+        $("#ftNewBody").innerHTML = `
+          <h3>Facturer l'avenant n° ${a.rang} (${esc(a.numero)})</h3>
+          <div class="small">${esc(a.client.nom || "Client")}${a.client.ref ? " · " + esc(a.client.ref) : ""} · devis ${esc(a.devisNumero)} · avenant <b>${k.eur.format(t.ttc)} TTC</b></div>
+          ${a.statut !== "accepte" ? `<p class="pt-warn">L'avenant n'est pas encore marqué « Accepté » : il le sera à la création de la facture.</p>` : ""}
+          ${deja.length ? `<div class="ft-deja"><b>Déjà facturé sur cet avenant</b>${deja.map(f => `<div><span>${esc(f.numero)} · ${esc(typeTxt(f))}</span><b>${k.eur.format(totals(normalize(f)).net)}</b></div>`).join("")}
+            <div class="reste"><span>Reste à facturer</span><b>${k.eur.format(Math.max(0, reste))}</b></div></div>` : ""}
+          <div class="ft-choice">
+            <button data-ftype="totale" class="${st.type === "totale" ? "on" : ""}"><b>Facture identique à l'avenant</b>
+              <span>Toutes les lignes de l'avenant, ${k.eur.format(t.ttc)} TTC.${acTTC ? ` Les acomptes déjà facturés (${k.eur.format(acTTC)}) sont déduits : net à payer ${k.eur.format(round2(t.ttc - acTTC))}.` : ""}</span></button>
+            <button data-ftype="acompte" class="${st.type === "acompte" ? "on" : ""}"><b>Facture d'acompte</b><span>Un pourcentage de l'avenant.</span></button>
+          </div>
+          ${st.type === "acompte" ? acompteBlock(st, ac, t, avHT) : ""}
+          <div class="err" id="ftErr"></div>
+          <div class="foot"><span class="spacer"></span><button class="btn" data-fnew="cancel">Annuler</button><button class="btn primary" data-fnew="ok">Créer la facture</button></div>`;
+      };
+      draw();
+      $("#ftNewBody").onclick = async ev => {
+        const g = s => ev.target.closest(s);
+        if (g("[data-ftype]")) { st.type = g("[data-ftype]").dataset.ftype; return draw(); }
+        if (g("[data-fpct]")) { st.mode = "pct"; st.idx = +g("[data-fpct]").dataset.fpct; st.pct = ac[st.idx][1]; return draw(); }
+        if (g("[data-favct]")) { st.mode = "avct"; st.idx = -1; return draw(); }
+        const b = g("[data-fnew]"); if (!b) return;
+        if (b.dataset.fnew === "cancel") return dlg.close();
+        if (st.type === "acompte") {
+          const v = st.mode === "avct" ? st.avct : st.pct;
+          if (!(v > 0 && v <= 100)) { $("#ftErr").textContent = "Indiquez un pourcentage entre 1 et 100."; return; }
+          if (acompteAmount(st, t, avHT).ht <= 0) { $("#ftErr").textContent = "Rien à facturer pour cet avancement."; return; }
+        }
+        b.disabled = true; dlg.close();
+        await this.createFromAvenant(a, st.type, st.pct, st.type === "acompte" && st.mode === "pct" && st.idx >= 0 ? ac[st.idx][0] : "", st);
+      };
+      $("#ftNewBody").oninput = ev => {
+        if (ev.target.id !== "ftPctIn") return;
+        if (st.mode === "avct") st.avct = k.num(ev.target.value); else { st.pct = k.num(ev.target.value); st.idx = -1; $("#ftNewBody").querySelectorAll("[data-fpct]").forEach(x => x.classList.remove("on")); }
+        const el = $("#ftAmtBox"); if (el) el.innerHTML = acompteTxt(st, t, avHT);
+      };
+      if (!dlg.open) dlg.showModal();
+    },
+
     mount(el) {
       this.el = el; this.mode = K().mobile() ? "m" : "pc";
       if (!this.bound) {
         this.bound = true;
-        el.addEventListener("click", e => current === this && this.onClick(e));
-        el.addEventListener("input", e => current === this && this.onInput(e));
-        el.addEventListener("change", e => current === this && this.onChange(e));
+        el.addEventListener("click", e => current === this && this.route(e, "onClick"));
+        el.addEventListener("input", e => current === this && this.route(e, "onInput"));
+        el.addEventListener("change", e => current === this && this.route(e, "onChange"));
         el.addEventListener("focusin", e => { if (current === this && e.target.classList?.contains("money")) { const v = K().num(e.target.value); e.target.value = e.target.value === "" ? "" : String(v).replace(".", ","); e.target.select(); } });
         el.addEventListener("focusout", e => { if (current === this && e.target.classList?.contains("money")) e.target.value = K().money(e.target.value.replace(",", ".")); });
         matchMedia("(max-width: 760px)").addEventListener("change", () => { if (current === this) this.mount(this.el); });
       }
       if (this.mode === "pc") this.mountPC(); else this.renderM();
     },
+    // aiguillage : sous-onglet Factures ou Avenants
+    route(e, fn) { return this[fn](e); },
     render() {
       if (!this.el || current !== this) return;
       if (this.mode === "pc") {
@@ -197,18 +334,19 @@
     renderList() {
       const list = $("#ftList"); if (!list) return;
       const q = norm(this.q), eur = K().eur;
-      const items = this.sorted().filter(f => !q || norm([f.numero, f.client?.nom, f.client?.ref, f.devisNumero].join(" ")).includes(q));
-      list.innerHTML = items.length ? items.map(f => `<button class="dv-item ${f.id === this.selId ? "on" : ""}" data-open="${f.id}">
+      const items = this.sorted().filter(f => topOf(f).id === f.id).filter(f => !q || familyOf(f).some(x => norm([x.numero, x.client?.nom, x.client?.ref, x.devisNumero].join(" ")).includes(q)));
+      const selTop = this.selId && store.get(COL, this.selId) ? topOf(store.get(COL, this.selId)).id : null;
+      list.innerHTML = items.length ? items.map(f => `<button class="dv-item ${f.id === selTop ? "on" : ""}" data-open="${f.id}">
           <b>${esc(f.numero)}</b><em>${eur.format(totals(normalize(f)).net)}</em>
           <span>${esc(f.client?.nom || "Client")}${f.client?.ref ? " · " + esc(f.client.ref) : ""}</span><span class="statut ${STCSS[f.statut] || "brouillon"}">${STATUTS[f.statut] || "À envoyer"}</span>
-          <span class="ft-type">${esc(typeTxt(f))}${f.devisNumero ? " · devis " + esc(f.devisNumero) : ""}</span></button>`).join("")
+          <span class="ft-type">${esc(typeTxt(f))}${f.devisNumero ? " · devis " + esc(f.devisNumero) : ""}${familyOf(f).length > 1 ? ` · <b class="dv-avn">+ ${familyOf(f).length - 1} autre${familyOf(f).length > 2 ? "s" : ""} facture${familyOf(f).length > 2 ? "s" : ""} de ce devis</b>` : ""}</span></button>`).join("")
         : `<div class="dv-empty">${store.list(COL).length ? "Aucune facture ne correspond." : "Aucune facture pour l'instant. Cliquez « + Facturer un devis », ou « Facturer » sur un devis."}</div>`;
     },
     renderPage() {
       const main = $("#ftMain"); if (!main) return;
       if (this.pickMode || !this.draft) { main.innerHTML = this.pickHtml(); return; }
       const f = this.draft;
-      main.innerHTML = `<div class="dv-bar">
+      main.innerHTML = familyTabs(f, "data-open") + `<div class="dv-bar">
           <button class="btn primary" data-act="pdf">Enregistrer en PDF sur le PC</button>
           <button class="btn" data-act="mail">Envoyer par mail</button>
           <select class="btn" data-act="statut" aria-label="Statut de la facture">${Object.entries(STATUTS).map(([k, v]) => `<option value="${k}" ${f.statut === k ? "selected" : ""}>${v}</option>`).join("")}</select>
@@ -313,27 +451,29 @@
       const d = k.normalize(dv), t = k.calc(d), deja = facturesOf(devisId).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
       const dejaTTC = round2(deja.reduce((s, f) => s + totals(normalize(f)).net, 0));
       const acTTC = acomptesTTC(devisId), hasTotale = deja.some(f => f.type === "totale");
-      const reste = Math.max(0, round2(t.ttc - dejaTTC));
+      const avAcc = AK().ofDevis(devisId).filter(a => a.statut === "accepte");
+      const avDispo = avAcc.filter(a => !this.avenantFacture(a.id));
+      const avTTC = round2(avDispo.reduce((s, a) => s + AK().ttcOf(a), 0));
+      const marche = round2(t.ttc + avAcc.reduce((s, a) => s + AK().ttcOf(a), 0));
+      const reste = Math.max(0, round2(marche - dejaTTC));
       const ac = k.ACOMPTES.map((lab, i) => [lab.replace(/\s*:$/, ""), k.num(d.acomptes[i])]).filter(([, p]) => p > 0);
       let dlg = $("#ftNew");
       if (!dlg) { document.body.insertAdjacentHTML("beforeend", `<dialog id="ftNew"><div class="dlg" id="ftNewBody"></div></dialog>`); dlg = $("#ftNew"); }
-      const st = { type: "totale", pct: ac[0]?.[1] || 30, idx: ac.length ? 0 : -1 };
+      const st = { type: "totale", pct: ac[0]?.[1] || 30, idx: ac.length ? 0 : -1, av: false, mode: "pct", avct: 50 };
+      const dvHT = round2(deja.filter(f => f.type === "acompte").reduce((s, f) => s + k.calc(normalize(f)).ht, 0));
       const draw = () => {
         const amtHT = round2(t.ht * st.pct / 100), amtTTC = round2(t.ttc * st.pct / 100);
         $("#ftNewBody").innerHTML = `
           <h3>Facturer le devis n° ${esc(d.numero)}</h3>
-          <div class="small">${esc(d.client.nom || "Client")}${d.client.ref ? " · " + esc(d.client.ref) : ""} · total du devis <b>${k.eur.format(t.ttc)} TTC</b></div>
+          <div class="small">${esc(d.client.nom || "Client")}${d.client.ref ? " · " + esc(d.client.ref) : ""} · total du devis <b>${k.eur.format(t.ttc)} TTC</b>${avAcc.length ? ` · avec avenants acceptés <b>${k.eur.format(marche)} TTC</b>` : ""}</div>
           ${deja.length ? `<div class="ft-deja"><b>Déjà facturé sur ce devis</b>${deja.map(f => `<div><span>${esc(f.numero)} · ${esc(typeTxt(f))}</span><b>${k.eur.format(totals(normalize(f)).net)}</b></div>`).join("")}
             <div class="reste"><span>Reste à facturer</span><b>${k.eur.format(reste)}</b></div></div>` : ""}
           <div class="ft-choice">
             <button data-ftype="totale" class="${st.type === "totale" ? "on" : ""}"><b>Facture identique au devis</b>
-              <span>Toutes les lignes du devis, ${k.eur.format(t.ttc)} TTC.${acTTC ? ` Les acomptes déjà facturés (${k.eur.format(acTTC)}) sont déduits : net à payer ${k.eur.format(round2(t.ttc - acTTC))}.` : ""}</span></button>
+              <span>Toutes les lignes du devis${st.av && avDispo.length ? " et des avenants" : ""}, ${k.eur.format(round2(t.ttc + (st.av ? avTTC : 0)))} TTC.${acTTC ? ` Les acomptes déjà facturés (${k.eur.format(acTTC)}) sont déduits : net à payer ${k.eur.format(round2(t.ttc + (st.av ? avTTC : 0) - acTTC))}.` : ""}</span></button>
             <button data-ftype="acompte" class="${st.type === "acompte" ? "on" : ""}"><b>Facture d'acompte</b><span>Un pourcentage du devis.</span></button>
           </div>
-          ${st.type === "acompte" ? `<div class="ft-pct">
-            ${ac.length ? `<div class="dv-chips">${ac.map(([lab, p], i) => `<button data-fpct="${i}" class="${st.idx === i ? "on" : ""}">${esc(lab)} · ${p} %</button>`).join("")}</div>` : ""}
-            <div class="ft-pctrow"><label for="ftPctIn">Pourcentage</label><input id="ftPctIn" inputmode="decimal" value="${String(st.pct).replace(".", ",")}"><span>%</span></div>
-            <div class="ft-amt">Montant de l'acompte : <b id="ftAmt">${k.eur.format(amtHT)} HT · ${k.eur.format(amtTTC)} TTC</b></div></div>` : ""}
+          ${st.type === "acompte" ? acompteBlock(st, ac, t, dvHT) : ""}
           ${st.type === "totale" && hasTotale ? `<p class="pt-warn">Attention : ce devis a déjà une facture totale.</p>` : ""}
           <div class="err" id="ftErr"></div>
           <div class="foot"><span class="spacer"></span><button class="btn" data-fnew="cancel">Annuler</button><button class="btn primary" data-fnew="ok">Créer la facture</button></div>`;
@@ -341,28 +481,35 @@
       draw();
       $("#ftNewBody").onclick = async ev => {
         const g = s => ev.target.closest(s);
+        if (ev.target.id === "ftAvInc") { st.av = ev.target.checked; return draw(); }
         if (g("[data-ftype]")) { st.type = g("[data-ftype]").dataset.ftype; return draw(); }
-        if (g("[data-fpct]")) { st.idx = +g("[data-fpct]").dataset.fpct; st.pct = ac[st.idx][1]; return draw(); }
+        if (g("[data-fpct]")) { st.mode = "pct"; st.idx = +g("[data-fpct]").dataset.fpct; st.pct = ac[st.idx][1]; return draw(); }
+        if (g("[data-favct]")) { st.mode = "avct"; st.idx = -1; return draw(); }
         const b = g("[data-fnew]"); if (!b) return;
         if (b.dataset.fnew === "cancel") return dlg.close();
-        if (st.type === "acompte" && !(st.pct > 0 && st.pct <= 100)) { $("#ftErr").textContent = "Indiquez un pourcentage entre 1 et 100."; return; }
+        if (st.type === "acompte") {
+          const v = st.mode === "avct" ? st.avct : st.pct;
+          if (!(v > 0 && v <= 100)) { $("#ftErr").textContent = "Indiquez un pourcentage entre 1 et 100."; return; }
+          if (acompteAmount(st, t, dvHT).ht <= 0) { $("#ftErr").textContent = "Rien à facturer pour cet avancement."; return; }
+        }
         b.disabled = true;
         try {
-          const f = fromDevis(dv, st.type, st.pct, st.idx >= 0 ? ac[st.idx][0] : "");
+          const f = fromDevis(dv, st.type, st.pct, st.mode === "pct" && st.idx >= 0 ? ac[st.idx][0] : "", st.type === "totale" && st.av ? avDispo : []);
+          if (st.type === "acompte" && st.mode === "avct") {
+            const m = acompteAmount(st, t, dvHT); f.avancement = st.avct; f.pct = m.pct;
+            f.lignes = [{ d: acompteLine(st, "", `le devis n° ${d.numero} du ${k.frDate(d.date)}`, d.client.ref, m), pu: m.ht, q: 1 }];
+          }
           const n = await store.create(COL, f);
           if (["brouillon", "envoye"].includes(dv.statut || "brouillon")) await store.patch("devis", dv.id, { statut: "accepte" }).catch(() => {});
           dlg.close();
           toast(`Facture ${f.numero} créée${st.type === "acompte" ? ` (acompte ${pctFr(st.pct)})` : ""}`);
-          this.pickMode = false; this.selId = n.id; this.draft = normalize(n); this.m = { screen: "view", id: n.id };
-          showTab("factures"); window.scrollTo(0, 0);
+          this.showFacture(n.id);
         } catch (e) { $("#ftErr").textContent = frError(e); b.disabled = false; }
       };
       $("#ftNewBody").oninput = ev => {
         if (ev.target.id !== "ftPctIn") return;
-        st.pct = k.num(ev.target.value);
-        const a = $("#ftAmt"); if (a) a.textContent = `${k.eur.format(round2(t.ht * st.pct / 100))} HT · ${k.eur.format(round2(t.ttc * st.pct / 100))} TTC`;
-        st.idx = -1;
-        $("#ftNewBody").querySelectorAll("[data-fpct]").forEach(x => x.classList.remove("on"));
+        if (st.mode === "avct") st.avct = k.num(ev.target.value); else { st.pct = k.num(ev.target.value); st.idx = -1; $("#ftNewBody").querySelectorAll("[data-fpct]").forEach(x => x.classList.remove("on")); }
+        const el = $("#ftAmtBox"); if (el) el.innerHTML = acompteTxt(st, t, dvHT);
       };
       if (!dlg.open) dlg.showModal();
     },
@@ -382,7 +529,7 @@
         const f = normalize(store.get(COL, m.id)), t = totals(f);
         const ech = f.echeance ? Math.round((new Date(f.echeance) - new Date(f.date)) / 864e5) : null;
         this.el.innerHTML = `<div class="dv dv-m">
-          <p class="dv-q">Facture ${esc(f.numero)}</p><p class="dv-sub">${esc(f.client.nom)} · ${esc(typeTxt(f))}${f.devisNumero ? " du devis " + esc(f.devisNumero) : ""}</p>
+          <button class="btn dv-back" data-act="mlist">‹ Liste des factures</button>${familyTabs(f, "data-mopen")}<p class="dv-q">Facture ${esc(f.numero)}</p><p class="dv-sub">${esc(f.client.nom)} · ${esc(typeTxt(f))}${f.devisNumero ? " du devis " + esc(f.devisNumero) : ""}</p>
           <div class="dv-prev" id="mPrev">${page(f, false)}</div>
           <div class="dv-card dv-sum"><div><span>Total HT</span><b>${k.eur.format(t.ht)}</b></div><div><span>TVA ${k.pctTxt(f.tva)}</span><b>${k.eur.format(t.tv)}</b></div>
             ${t.ded ? `<div><span>Total TTC</span><b>${k.eur.format(t.ttc)}</b></div><div><span>Acomptes déjà facturés</span><b>− ${k.eur.format(t.ded)}</b></div>` : ""}
@@ -404,8 +551,8 @@
       this.el.innerHTML = `<div class="dv dv-m">
         <h1>Création de facture</h1>
         <button class="btn primary big" data-act="mpick">+ Facturer un devis</button>
-        ${items.length ? `<div class="dv-sub" style="margin:4px 0 0">Factures récentes</div>` + items.map(f => `<button class="dv-mitem" data-mopen="${f.id}"><b>${esc(f.client?.nom || "Client")}</b><em>${k.eur.format(totals(normalize(f)).net)}</em>
-            <span>${esc(f.numero)} · ${esc(typeTxt(f))}</span><span class="statut ${STCSS[f.statut] || "brouillon"}">${STATUTS[f.statut] || "À envoyer"}</span></button>`).join("")
+        ${items.length ? `<div class="dv-sub" style="margin:4px 0 0">Factures récentes</div>` + items.filter(f => topOf(f).id === f.id).map(f => `<button class="dv-mitem" data-mopen="${f.id}"><b>${esc(f.client?.nom || "Client")}</b><em>${k.eur.format(totals(normalize(f)).net)}</em>
+            <span>${esc(f.numero)} · ${esc(typeTxt(f))}${familyOf(f).length > 1 ? ` · + ${familyOf(f).length - 1} autre${familyOf(f).length > 2 ? "s" : ""}` : ""}</span><span class="statut ${STCSS[f.statut] || "brouillon"}">${STATUTS[f.statut] || "À envoyer"}</span></button>`).join("")
           : `<div class="dv-card dv-sub" style="margin:0">Aucune facture pour l'instant. Touchez « Facturer un devis », ou « Facturer ce devis » depuis un devis.</div>`}</div>`;
     },
     async saveM(patch) {

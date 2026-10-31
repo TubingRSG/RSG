@@ -36,3 +36,30 @@
 .ft-seg{grid-template-columns:repeat(3,1fr)}
 .ft-seg button.on.st-envoye{background:#1f5aa6;border-color:#1f5aa6}
 .ft-seg button.on.st-accepte{background:#1e7a46;border-color:#1e7a46}
+
+/* sous-onglets sous un devis ou une facture : Devis | Avenant n° 1 | + Créer un avenant */
+.dv-subtabs{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch}
+.dv-subtabs button{display:flex;flex-direction:column;align-items:flex-start;gap:0;border:1.5px solid var(--line);background:var(--surface);border-radius:10px;padding:6px 12px;min-width:110px;text-align:left}
+.dv-subtabs button b{font-size:13.5px}
+.dv-subtabs button small{font-size:11.5px;color:var(--muted)}
+.dv-subtabs button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.dv-subtabs button.on small{color:#cfcfd4}
+.dv-subtabs button.add{border-style:dashed;color:var(--red);font-weight:700;justify-content:center;align-items:center;font-size:13.5px}
+.dv-subtabs button.add:hover{border-color:var(--red)}
+.dv-m .dv-subtabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -2px;padding:2px}
+.dv-m .dv-subtabs button{flex:none;min-width:auto;padding:8px 12px}
+.dv-avn{grid-column:1/-1;font-size:11.5px;color:var(--red);font-weight:700}
+/* page A4 de l'avenant */
+.a4 .av-tip{margin-top:8px;font-size:11px;color:#6b6b6b;font-style:italic}
+.a4 tr.moins td{color:#c00000}
+.a4 .av-recap{margin:16px 0 0 auto;width:420px;border:1px solid #1a1a1a;font-size:12.5px}
+.a4 .av-recap div{display:grid;grid-template-columns:1fr 120px;padding:5px 10px;border-bottom:1px solid #e4e4e7}
+.a4 .av-recap div b{text-align:right;font-weight:400}
+.a4 .av-recap .tt{background:#1a1a1a;color:#fff;border:0;padding:8px 10px}
+.a4 .av-recap .tt span,.a4 .av-recap .tt b{font-weight:700;font-size:13.5px}
+.av-sign{grid-template-columns:1fr 1fr!important}
+.av-sign button.on:last-child{background:var(--red);border-color:var(--red)}
+
+.dv-subtl{align-self:center;font-size:12.5px;font-weight:700;color:var(--muted);margin-right:2px}
+.dv-m .dv-subtl{display:none}
+#ftNew{max-height:calc(100dvh - 24px);overflow:auto}
