@@ -327,7 +327,7 @@
         const inside = this.el.querySelector(".a4")?.contains(document.activeElement);
         if (this.selId && !this.dirty && !this.saving && !inside) {
           const fresh = store.get("devis", this.selId);
-          if (fresh && JSON.stringify(normalize(fresh)) !== JSON.stringify(this.draft)) { this.draft = normalize(fresh); this.renderPage(); }
+          if (fresh && (!this.draft || JSON.stringify(cleanLines(normalize(fresh))) !== JSON.stringify(cleanLines(this.draft)))) { this.draft = normalize(fresh); this.renderPage(); }
         }
         if (this.selId && !store.get("devis", this.selId) && !this.saving) { this.selId = null; this.draft = null; this.renderPage(); }
       } else if (this.m.screen === "list") this.renderM();
@@ -365,6 +365,9 @@
       const dl = $("#dvClients"); if (dl) dl.innerHTML = store.list("clients").map(c => `<option value="${esc(c.nom)}">${esc([c.adr2].filter(Boolean).join(" "))}</option>`).join("");
     },
     renderPage() {
+      const y = window.scrollY; this._renderPage(); if (window.scrollY !== y) window.scrollTo(0, y);   // la page ne saute pas
+    },
+    _renderPage() {
       const main = $("#dvMain"); if (!main) return;
       if (!this.draft) {
         main.innerHTML = `<div class="dv-card"><b>Aucun devis ouvert.</b><p class="dv-hint">Créez un devis avec « + Nouveau devis », ou choisissez-en un dans la liste.</p></div>`;
@@ -381,7 +384,7 @@
           <button class="btn" data-act="dup">Dupliquer</button>
           <select class="btn" data-act="statut" aria-label="Statut du devis">${Object.entries(STATUTS).map(([k, v]) => `<option value="${k}" ${d.statut === k ? "selected" : ""}>${v}</option>`).join("")}</select>
           <button class="btn danger" data-act="del">Supprimer</button>
-          <span class="st" id="dvSt"><i></i><span>${this.selId ? "Enregistré" : "Nouveau devis"}</span></span>
+          <span class="st" id="dvSt"><i></i><span>save</span></span>
         </div>
         <div class="dv-hint">Remplissez directement les cases du devis, comme dans Excel (Tab pour passer à la case suivante). Tout est enregistré automatiquement.</div>
         <div class="dv-stage">${page(d, true)}</div>`;
@@ -389,7 +392,7 @@
     },
     status(txt, pending) {
       const s = $("#dvSt"); if (!s) return;
-      s.classList.toggle("pending", !!pending); s.lastElementChild.textContent = txt;
+      s.classList.toggle("pending", !!pending); s.lastElementChild.textContent = pending ? "modif" : (/Non/.test(txt) ? "erreur" : "save");
     },
     queueSave() {
       if (!canEdit()) return;

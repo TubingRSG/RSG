@@ -201,7 +201,7 @@
       const st = this.el?.querySelector("#ptSt"); if (!st) return;
       const wait = this.pending.size > 0;
       st.classList.toggle("pending", wait);
-      st.querySelector("span").textContent = wait ? "Enregistrement…" : "Enregistré";
+      st.querySelector("span").textContent = wait ? "modif" : "save";
     },
 
     /* ---------- affichage ---------- */
@@ -229,7 +229,7 @@
             <button data-v="jour">Pointage journalier</button>
             <button data-v="mois">Pointage mensuel</button>
           </div>
-          <span class="pt-st" id="ptSt"><i></i><span>Enregistré</span></span>
+          <span class="pt-st" id="ptSt"><i></i><span>save</span></span>
         </div>
         <div id="ptBody"></div>
         <datalist id="ptCh"></datalist><datalist id="ptTr"></datalist><datalist id="ptPers"></datalist>

@@ -149,6 +149,9 @@
 
     /* ----------------------------- PC ----------------------------- */
     renderPC(pane) {
+      const y = window.scrollY; this._renderPC(pane); if (window.scrollY !== y) window.scrollTo(0, y);
+    },
+    _renderPC(pane) {
       this.pane = pane || this.pane; if (!this.pane || !this.draft) return;
       const a = this.draft, facts = window.factureTab?.avenantFactures(a.id) || [];
       this.pane.innerHTML = `<div id="avPane"><div class="dv-bar">
@@ -159,7 +162,7 @@
           <button class="btn" data-act="facturer">Transformer en facture d'avenant</button>
           ${facts.length ? `<button class="btn" data-act="voirfacture">Voir ${facts.length > 1 ? `les ${facts.length} factures` : `la facture ${esc(facts[0].numero)}`}</button>` : ""}
           <button class="btn danger" data-act="del">Supprimer l'avenant</button>
-          <span class="st" id="avSt"><i></i><span>Enregistré</span></span>
+          <span class="st" id="avSt"><i></i><span>save</span></span>
         </div>
         <div class="dv-hint">Avenant n° ${a.rang} au devis ${esc(a.devisNumero)} : écrivez les travaux en plus (prix positif) ou en moins (prix négatif), comme dans Excel. Tout est enregistré automatiquement.</div>
         <div class="dv-stage">${page(a, true)}</div></div>`;
@@ -168,9 +171,9 @@
     refreshPC() {
       if (!this.id || this.dirty || this.saving || this.pane?.querySelector(".a4")?.contains(document.activeElement)) return;
       const fresh = store.get(COL, this.id);
-      if (fresh && JSON.stringify(normalize(fresh)) !== JSON.stringify(this.draft)) { this.draft = normalize(fresh); this.renderPC(); }
+      if (fresh && (!this.draft || JSON.stringify(K().cleanLines(normalize(fresh))) !== JSON.stringify(K().cleanLines(this.draft)))) { this.draft = normalize(fresh); this.renderPC(); }
     },
-    status(txt, pending) { const s = $("#avSt"); if (!s) return; s.classList.toggle("pending", !!pending); s.lastElementChild.textContent = txt; },
+    status(txt, pending) { const s = $("#avSt"); if (!s) return; s.classList.toggle("pending", !!pending); s.lastElementChild.textContent = pending ? "modif" : (/Non/.test(txt) ? "erreur" : "save"); },
     queueSave() {
       if (!canEdit()) return;
       this.dirty = true; this.status("Enregistrement…", true);

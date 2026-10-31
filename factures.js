@@ -309,7 +309,7 @@
         if (!this.selId && !this.draft) { const first = this.sorted()[0]; if (first) { this.selId = first.id; this.draft = normalize(first); this.renderList(); this.renderPage(); } return; }
         if (this.selId && !this.dirty && !this.saving && !inside) {
           const fresh = store.get(COL, this.selId);
-          if (fresh && JSON.stringify(normalize(fresh)) !== JSON.stringify(this.draft)) { this.draft = normalize(fresh); this.renderPage(); }
+          if (fresh && (!this.draft || JSON.stringify(K().cleanLines(normalize(fresh))) !== JSON.stringify(K().cleanLines(this.draft)))) { this.draft = normalize(fresh); this.renderPage(); }
           if (!fresh) { this.selId = null; this.draft = null; this.renderPage(); }
         }
       } else if (this.m.screen !== "view") this.renderM();
@@ -343,6 +343,9 @@
         : `<div class="dv-empty">${store.list(COL).length ? "Aucune facture ne correspond." : "Aucune facture pour l'instant. Cliquez « + Facturer un devis », ou « Facturer » sur un devis."}</div>`;
     },
     renderPage() {
+      const y = window.scrollY; this._renderPage(); if (window.scrollY !== y) window.scrollTo(0, y);
+    },
+    _renderPage() {
       const main = $("#ftMain"); if (!main) return;
       if (this.pickMode || !this.draft) { main.innerHTML = this.pickHtml(); return; }
       const f = this.draft;
@@ -352,7 +355,7 @@
           <select class="btn" data-act="statut" aria-label="Statut de la facture">${Object.entries(STATUTS).map(([k, v]) => `<option value="${k}" ${f.statut === k ? "selected" : ""}>${v}</option>`).join("")}</select>
           ${f.devisId && store.get("devis", f.devisId) ? `<button class="btn" data-act="devis">Voir le devis</button>` : ""}
           <button class="btn danger" data-act="del">Supprimer</button>
-          <span class="st" id="ftSt"><i></i><span>Enregistré</span></span>
+          <span class="st" id="ftSt"><i></i><span>save</span></span>
         </div>
         <div class="dv-hint">${esc(typeTxt(f))}${f.devisNumero ? ` du devis n° ${esc(f.devisNumero)}` : ""}. Vous pouvez corriger les cases comme dans Excel : tout est enregistré automatiquement.</div>
         <div class="dv-stage">${page(f, true)}</div>`;
@@ -371,7 +374,7 @@
         <span>${esc(n.numero)}${n.client.ref ? " · " + esc(n.client.ref) : ""}</span>
         <span class="ft-done">${fs.length ? `${fs.length} facture${fs.length > 1 ? "s" : ""}` : ""}</span></button>`;
     },
-    status(txt, pending) { const s = $("#ftSt"); if (!s) return; s.classList.toggle("pending", !!pending); s.lastElementChild.textContent = txt; },
+    status(txt, pending) { const s = $("#ftSt"); if (!s) return; s.classList.toggle("pending", !!pending); s.lastElementChild.textContent = pending ? "modif" : (/Non/.test(txt) ? "erreur" : "save"); },
     queueSave() {
       if (!canEdit()) return;
       this.dirty = true; this.status("Enregistrement…", true);
